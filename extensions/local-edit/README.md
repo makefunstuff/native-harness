@@ -83,12 +83,12 @@ the call through pi's own edit tool and through local-edit's matcher. Snapshot:
 
 | | local (llama.cpp) | cloud |
 |---|---:|---:|
-| sessions / edit calls | 22 / 86 | 264 / 279 |
+| sessions / edit calls | 22 / 86 | 306 / 294 |
 | failed edits with pi's edit | 8 (9.3 %) | 4 (1.4 %) |
 | … of which the file content could be rebuilt | 5 | 2 |
 | … placed by local-edit | 1 (98.9 % similar, a typo in a 28-line `oldText`) | 0 |
 | … still refused, with a better message | 4 | 2 |
-| successful edits replayed: same file with local-edit | 35 / 35 | 94 / 94 |
+| successful edits replayed: same file with local-edit | 35 / 35 | 105 / 105 |
 | **edit error rate** | **9.3 % → 8.1 %** | 1.4 % → 1.4 % |
 
 The refusals are right to refuse:
@@ -99,7 +99,7 @@ The refusals are right to refuse:
   exactly that.
 - A duplicate. local-edit gives the line numbers of both places.
 
-None of the 129 successful edits changes outcome under local-edit. The sample is small, and only
+None of the 140 successful edits changes outcome under local-edit. The sample is small, and only
 5 of the 8 local failures could be rebuilt, so read 9.3 % → 8.1 % as a direction, not a rate.
 These sessions include none of the basename or `path#tag` failures that the findings doc counts
 in OMP's hashline sessions. The tree those OMP sessions edited has changed since, so those calls
@@ -122,15 +122,15 @@ did not ask to change was changed or removed (the destructive-edit check). Each 
 | arm | runs | hidden tests pass | edit calls | edit errors | placed loosely | untouched-code check failed | edits dropping ≥ 3 lines |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | base (pi's edit) | 18 | 18/18 | 30 | 1 (3.3 %) | – | 0/18 | 3 |
-| local-edit | 18 | 18/18 | 24 | 0 | 0 | 0/18 | 1 |
+| local-edit | 18 | 18/18 | 29 | 0 | 0 | 0/18 | 2 |
 
 What this shows:
-- **No regression.** Pass rate, edit counts and wall time (median 11 s vs 10 s) are the same.
+- **No regression.** Pass rate, edit counts and wall time (median 11 s vs 12 s) are the same.
 - **The bench cannot tell the arms apart on errors.** DeepSeek Flash almost never misses an edit.
   The one baseline error was malformed JSON arguments, which pi rejects before any edit code runs,
   so it says nothing about either arm.
-- **The 3+-line drops were not destroyed code.** I read all four: each is a deliberate rewrite of
-  the model's own test.
+- **The 3+-line drops were not destroyed code.** I read all five: each is a deliberate rewrite
+  of the model's own test.
 - **Claude was not measured.** In the first version of this bench, Claude Sonnet 5.5 made no
   `edit` calls at all (it edits through bash scripts), so it was left out.
 
@@ -152,6 +152,33 @@ Things it refuses on purpose:
 
 When `oldText` misremembers a value the edit does *not* change (`timeout: 30` for a file's
 `300`), it keeps the file's value and says so. It never writes the model's stale copy back.
+
+### 4. Cost of a miss
+
+The search runs synchronously inside pi, so it is bounded:
+- **Ranking:** windows are first ranked by bigram overlap, which is linear in the file size.
+- **Exact scores:** the exact Levenshtein ratio is computed only for the best window of at most
+  6 separate places. A place's shifted windows are scored only when its best one comes close.
+  Scoring stops once two places reach 95 %, since the edit is then ambiguous anyway.
+- **Work budget:** about 1.2·10⁸ cells. A strong candidate left unchecked when the budget runs
+  out counts as a possible rival, so the edit is refused, never guessed.
+- **Size limits:** an `oldText` over 20,000 characters is not placed loosely. Candidates over
+  2,500 characters show the bigram score.
+
+Timings:
+- A 300-line stale `oldText` against a 3,000-line file: 37.6 s before this bound, **32 ms**
+  after, through `tool.execute`.
+- A 500-line one against 2,000 lines: 98 s before, 7 ms after.
+- A 300-line block with one typo is still placed, in 0.44 s.
+- The worst case found, a 360-line near-miss in a 4,000-line file of repeated lines, takes 0.3 s.
+- `index.test.ts` checks these bounds.
+
+### Homelab evals: not run
+
+The task asked for the homelab evals too. Their coding tasks
+(`local-ai-campaign-2026-09-08/capability-suite`) are graded by Python validators. The
+no-Python rule for this repository rules them out until they are ported, so they are not part of
+these numbers.
 
 ### Local 27B: pending
 

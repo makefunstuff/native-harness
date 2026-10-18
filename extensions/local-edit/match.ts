@@ -260,6 +260,8 @@ interface Window {
 	start: number; // 0-based first line
 	size: number; // number of lines
 	score: number;
+	exact?: boolean; // score is the Levenshtein ratio (else the bigram Dice score)
+	unchecked?: boolean; // could have reached the threshold, but the work budget ran out first
 }
 
 /** Re-indent newText from the model's indentation to the file's (tabs and spaces converted). */
@@ -311,34 +313,128 @@ function splitOld(oldText: string): { lines: string[]; trailingNewline: boolean 
 	return { lines, trailingNewline };
 }
 
-/** Whole-line windows scored against oldText; the best few, best first. */
-function scoreWindows(fileLines: string[], oldLines: string[], floor: number, keep: number): Window[] {
-	const target = oldLines.map(norm).join("\n");
-	const oldSet = new Set(oldLines.map(norm).filter(Boolean));
-	const n = oldLines.length;
-	const sizes = [n, n - 1, n + 1].filter((s) => s >= 1 && s <= fileLines.length);
-	const normFile = fileLines.map(norm);
-	// cheap prefilter on long oldTexts: windows sharing the most whole lines
-	const hits = normFile.map((l) => (l && oldSet.has(l) ? 1 : 0));
-	const prefix = [0];
-	for (const h of hits) prefix.push(prefix[prefix.length - 1] + h);
-	let cands: Array<{ start: number; size: number; pre: number }> = [];
-	for (const size of sizes)
-		for (let s = 0; s + size <= fileLines.length; s++) cands.push({ start: s, size, pre: prefix[s + size] - prefix[s] });
-	if (n > 4) {
-		cands.sort((a, b) => b.pre - a.pre);
-		cands = cands.slice(0, 60);
-	}
-	const out: Window[] = [];
-	for (const c of cands) {
-		const text = normFile.slice(c.start, c.start + c.size).join("\n");
-		out.push({ start: c.start, size: c.size, score: similarity(text, target, floor) });
-	}
-	out.sort((a, b) => b.score - a.score || Math.abs(a.size - n) - Math.abs(b.size - n));
-	return out.slice(0, keep);
+// Cost bounds: the window search must stay well under a second on large files, since it runs
+// synchronously inside pi. Windows are ranked by bigram overlap (linear time), and the exact
+// Levenshtein ratio is computed only for the best few, and only up to EXACT_MAX characters.
+const BUCKETS = 4096;
+const EXACT_REGIONS = 6; // separate places that get an exact score (so a rival is seen)
+const EXACT_PER_REGION = 3; // shifted/resized windows per place
+const EXACT_MAX_PLACE = 20_000; // characters: longer oldTexts are not placed loosely
+const PLACE_DICE = 0.85; // a window ≥ 95 % Levenshtein-similar always shares more bigrams than this
+const EXACT_BUDGET = 1.2e8; // banded Levenshtein cells per search (about 0.2-0.3 s)
+const EXACT_MAX_SHOW = 2_500; // characters: longer candidates show the bigram score
+
+function bigrams(line: string): number[] {
+	const out: number[] = [];
+	for (let i = 0; i + 1 < line.length; i++) out.push((line.charCodeAt(i) * 31 + line.charCodeAt(i + 1)) & (BUCKETS - 1));
+	return out;
 }
 
-const overlaps = (a: Window, b: Window) => a.start < b.start + b.size && b.start < a.start + a.size;
+/** Share of the bigrams of `pat` that `text` also has (1 = all of them). */
+export function containment(text: string, pat: string): number {
+	const p = bigrams(pat);
+	if (!p.length) return text.includes(pat) ? 1 : 0;
+	const have = new Int32Array(BUCKETS);
+	for (const g of bigrams(text)) have[g]++;
+	let inter = 0;
+	for (const g of p) if (have[g]-- > 0) inter++;
+	return inter / p.length;
+}
+
+/**
+ * Bigram Dice score of every whole-line window of the given size against oldText, in one pass
+ * (the window's bigram counts are updated line by line as it slides).
+ */
+function slideDice(lineGrams: number[][], target: Int32Array, targetTotal: number, size: number): Float64Array {
+	const out = new Float64Array(Math.max(0, lineGrams.length - size + 1));
+	const w = new Int32Array(BUCKETS);
+	let inter = 0;
+	let total = 0;
+	const add = (gs: number[], d: 1 | -1) => {
+		for (const g of gs) {
+			if (d === 1) {
+				if (w[g] < target[g]) inter++;
+				w[g]++;
+			} else {
+				w[g]--;
+				if (w[g] < target[g]) inter--;
+			}
+		}
+		total += d * gs.length;
+	};
+	for (let i = 0; i < lineGrams.length; i++) {
+		add(lineGrams[i], 1);
+		if (i >= size) add(lineGrams[i - size], -1);
+		if (i >= size - 1) out[i - size + 1] = total + targetTotal ? (2 * inter) / (total + targetTotal) : 1;
+	}
+	return out;
+}
+
+/**
+ * Whole-line windows (same line count as oldText, one more, one less) scored against oldText; the
+ * best few, best first. score is the Levenshtein ratio for the top EXACT_TOP windows (computed only
+ * far enough to know whether it reaches `floor`), and the bigram Dice score for the rest or when
+ * the text is longer than EXACT_MAX characters (`exact` says which).
+ */
+let scoreWindowsLast: Window[] = []; // every window of the last search, unchecked ones included
+
+function scoreWindows(fileLines: string[], oldLines: string[], floor: number, keep: number): Window[] {
+	const target = oldLines.map(norm).join("\n");
+	const n = oldLines.length;
+	const normFile = fileLines.map(norm);
+	const grams = normFile.map(bigrams);
+	const tBag = new Int32Array(BUCKETS);
+	let tTotal = 0;
+	for (const l of oldLines.map(norm)) for (const g of bigrams(l)) {
+		tBag[g]++;
+		tTotal++;
+	}
+	const cands: Window[] = [];
+	for (const size of [n, n - 1, n + 1].filter((s) => s >= 1 && s <= fileLines.length)) {
+		const d = slideDice(grams, tBag, tTotal, size);
+		d.forEach((score, start) => cands.push({ start, size, score, exact: false }));
+	}
+	cands.sort((a, b) => b.score - a.score || Math.abs(a.size - n) - Math.abs(b.size - n));
+	// exact scores for the best few windows of each of the best few separate places
+	const maxLen = floor >= 0.9 ? EXACT_MAX_PLACE : EXACT_MAX_SHOW;
+	const regions: Array<{ seed: Window; done: number; best: number }> = [];
+	const top: Window[] = [];
+	let budget = EXACT_BUDGET;
+	let placed = 0; // separate places at or above the floor: two means ambiguous, stop scoring
+	for (const c of cands.slice(0, 400)) {
+		let region = regions.find((g) => overlaps(g.seed, c));
+		if (!region) {
+			if (regions.length >= Math.max(EXACT_REGIONS, keep)) continue;
+			region = { seed: c, done: 0, best: 0 };
+			regions.push(region);
+		} else if (region.done >= EXACT_PER_REGION) continue;
+		region.done++;
+		const text = normFile.slice(c.start, c.start + c.size).join("\n");
+		// placing: skip windows that cannot reach 95 %, and a place's shifted windows unless its best one came close
+		const worth = floor < 0.9 || (c.score >= PLACE_DICE && (region.done === 1 || region.best >= floor - 0.02));
+		const len = Math.max(text.length, target.length);
+		const cost = len * (2 * Math.ceil((1 - floor) * len) + 1);
+		if (worth && regions.indexOf(region) < EXACT_REGIONS && len <= maxLen) {
+			if (placed >= 2 || cost > budget) c.unchecked = floor >= 0.9;
+			else {
+				budget -= cost;
+				const before = region.best;
+				c.score = similarity(text, target, floor);
+				c.exact = true;
+				region.best = Math.max(region.best, c.score);
+				if (before < floor && region.best >= floor) placed++;
+			}
+		}
+		top.push(c);
+	}
+	top.sort((a, b) => b.score - a.score || Math.abs(a.size - n) - Math.abs(b.size - n));
+	scoreWindowsLast = top;
+	return top.slice(0, keep);
+}
+
+function overlaps(a: Window, b: Window): boolean {
+	return a.start < b.start + b.size && b.start < a.start + a.size;
+}
 
 type Found = { from: number; to: number; newText: string; how: string; lines: string } | { ambiguous: number[] } | { conflict: string } | undefined;
 
@@ -379,6 +475,8 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 			for (let i = 0; i < fileLines.length; i++) {
 				const line = fileLines[i];
 				if (line.length < pat.length * SIMILARITY - 2) continue;
+				// ≥ 95 % similar keeps most bigrams; and bound the quadratic search on long lines
+				if (containment(line, pat) < 0.8 || line.length * pat.length > 4_000_000) continue;
 				const b = bestSubstring(line, pat);
 				if (b.ratio >= SIMILARITY) hits.push({ line: i, ...b });
 			}
@@ -403,10 +501,12 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 	}
 
 	// 4b. similar whole-line window
-	const ws = scoreWindows(fileLines, oldLines, SIMILARITY, 40).filter((w) => w.score >= SIMILARITY);
+	const ws = scoreWindows(fileLines, oldLines, SIMILARITY, 40).filter((w) => w.exact && w.score >= SIMILARITY);
 	if (!ws.length) return undefined;
 	const best = ws[0];
-	const rivals = ws.filter((w) => !overlaps(w, best));
+	const rivals: Window[] = [];
+	const all = scoreWindowsLast;
+	for (const w of [...ws, ...all.filter((w) => w.unchecked)]) if (!overlaps(w, best) && !rivals.some((v) => overlaps(v, w))) rivals.push(w);
 	if (rivals.length) return { ambiguous: [best.start + 1, ...rivals.map((w) => w.start + 1)] };
 	if (ws.some((w) => w !== best && overlaps(w, best) && w.score === best.score && w.size === best.size)) return undefined;
 	// the boundary lines must themselves look alike, so a partial first/last line is not dropped
@@ -442,10 +542,16 @@ export function closestCandidates(content: string, oldText: string, max = 3, con
 	let ws: Window[];
 	if (oldLines.length === 1) {
 		const pat = oldLines[0].trim();
+		// rank lines by bigram containment, then compute the exact score for the best few only
 		ws = fileLines
-			.map((l, i) => {
-				const b = l.trim() && pat ? bestSubstring(l, pat) : { ratio: 0 };
-				return { start: i, size: 1, score: Math.max(b.ratio, similarity(norm(l), norm(pat))) };
+			.map((l, i) => ({ start: i, size: 1, score: l.trim() && pat ? containment(l, pat) : 0 }))
+			.sort((a, b) => b.score - a.score)
+			.slice(0, 20)
+			.map((w) => {
+				const l = fileLines[w.start];
+				if (!l.trim() || !pat || l.length * pat.length > 4_000_000) return w;
+				const b = bestSubstring(l, pat);
+				return { ...w, score: Math.max(b.ratio, similarity(norm(l), norm(pat), 0.3)) };
 			})
 			.sort((a, b) => b.score - a.score);
 	} else {

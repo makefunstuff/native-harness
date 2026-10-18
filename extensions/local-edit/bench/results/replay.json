@@ -21,8 +21,8 @@
   "okDifferent": 0
  },
  "cloud": {
-  "sessions": 264,
-  "edits": 279,
+  "sessions": 306,
+  "edits": 294,
   "failed": 4,
   "failedKnown": 2,
   "unreliable": 0,
@@ -30,13 +30,13 @@
   "recoveredHow": {},
   "stillFailing": 2,
   "stillHow": {
-   "not found (nothing similar)": 1,
+   "not found (candidates shown)": 1,
    "ambiguous (lines listed)": 1
   },
   "pathFailed": 0,
   "pathRecovered": 0,
-  "okKnown": 94,
-  "okSame": 94,
+  "okKnown": 105,
+  "okSame": 105,
   "okDifferent": 0
  }
 }

@@ -292,3 +292,26 @@ test("compactDiff: a modified line is not counted as dropped", () => {
 	assert.equal(d.dropped, 0);
 	assert.doesNotMatch(d.text, /Warning/);
 });
+
+test("a long stale oldText fails fast (the search runs synchronously inside pi)", () => {
+	const mk = (n: number, f: (i: number) => string) => Array.from({ length: n }, (_, i) => f(i)).join("\n");
+	const file = mk(3000, (i) => `    const value_${i} = compute(${i}, "item-${i}") + offset;`);
+	for (const n of [300, 500]) {
+		const t = Date.now();
+		assert.throws(() => resolveEdits(file, [{ oldText: mk(n, (i) => `    let stale_${i} = other(${i * 7}, 'thing-${i}') - delta;`), newText: "x" }], "big.ts"), /Could not find/);
+		assert.ok(Date.now() - t < 2000, `${n}-line miss took ${Date.now() - t} ms`);
+	}
+	// a long block with one typo is still placed, quickly
+	const lines = file.split("\n");
+	const t = Date.now();
+	const r = resolveEdits(file, [{ oldText: lines.slice(100, 400).join("\n").replace("value_250 ", "value_25O "), newText: lines.slice(100, 400).join("\n") }], "big.ts");
+	assert.match(r.notes[0], /matched lines 101-400/);
+	assert.ok(Date.now() - t < 3000, `300-line placement took ${Date.now() - t} ms`);
+});
+
+test("a near match of a block that appears twice is refused, each place listed once", () => {
+	const block = Array.from({ length: 20 }, (_, i) => `    block_line_${i} = do_thing(${i});`);
+	const filler = (k: string) => Array.from({ length: 50 }, (_, i) => `    ${k}_${i}();`);
+	const file = [...filler("a"), ...block, ...filler("b"), ...block, ...filler("c")].join("\n");
+	assert.throws(() => resolveEdits(file, [{ oldText: block.join("\n").replace("do_thing(3)", "do_thng(3)"), newText: "x" }], "f.ts"), /several places \(lines 51, 121\)/);
+});

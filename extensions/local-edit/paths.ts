@@ -94,15 +94,16 @@ export function resolveEditPath(p: string, cwd: string): PathResolution {
 
 /**
  * Files under root (other than `exclude`) that contain `text` exactly: for a miss that was meant for
- * another file. Bounded: small text files only, at most `budget` files read.
+ * another file. Bounded (it runs synchronously inside pi): files under 1 MB, at most `budget`
+ * files and `bytes` bytes read in all.
  */
-export function findTextElsewhere(root: string, text: string, exclude: string, budget = 3000): string[] {
+export function findTextElsewhere(root: string, text: string, exclude: string, budget = 2000, bytes = 16_000_000): string[] {
 	const needle = text.trim();
 	if (needle.length < 20) return [];
 	const found: string[] = [];
 	let read = 0;
 	const walk = (dir: string, depth: number) => {
-		if (depth > MAX_DEPTH || read >= budget || found.length >= 5) return;
+		if (depth > MAX_DEPTH || read >= budget || bytes <= 0 || found.length >= 5) return;
 		let entries;
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
@@ -110,7 +111,7 @@ export function findTextElsewhere(root: string, text: string, exclude: string, b
 			return;
 		}
 		for (const d of entries) {
-			if (read >= budget || found.length >= 5) return;
+			if (read >= budget || bytes <= 0 || found.length >= 5) return;
 			const p = join(dir, d.name);
 			if (d.isDirectory()) {
 				if (!SKIP.has(d.name) && !d.name.startsWith(".")) walk(p, depth + 1);
@@ -118,8 +119,10 @@ export function findTextElsewhere(root: string, text: string, exclude: string, b
 			}
 			if (!d.isFile() || p === exclude) continue;
 			try {
-				if (statSync(p).size > 1_000_000) continue;
+				const size = statSync(p).size;
+				if (size > 1_000_000) continue;
 				read++;
+				bytes -= size;
 				const body = readFileSync(p, "utf8").replace(/\r\n?/g, "\n");
 				if (body.includes(needle)) found.push(relative(root, p));
 			} catch {}
