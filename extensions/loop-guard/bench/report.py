@@ -29,10 +29,31 @@ def summary(rows):
     }
 
 
+def inject_report(label, rows):
+    scen = sorted({r["scenario"] for r in rows})
+    rounds = max(r["round"] for r in rows)
+    print(f"### {label} (injection, {rounds} rounds per scenario and arm)\n")
+    print("| scenario | arm | passed | model repeats the failed call at once | identical repeats in all | model turns (median) | guard notes / nudges |")
+    print("|---|---|---:|---:|---:|---:|---:|")
+    for sc in scen:
+        for arm in ("base", "guard"):
+            rs = [r for r in rows if r["scenario"] == sc and r["arm"] == arm]
+            if not rs:
+                continue
+            notes = sum(r["note_retry"] + r["note_repeat"] + r["note_streak"] for r in rs)
+            print(f"| {sc} | {'with' if arm == 'guard' else 'without'} | {sum(r['passed'] for r in rs)}/{len(rs)} | "
+                  f"{sum(r['first_call_repeats'] for r in rs)}/{len(rs)} | {sum(r['repeats_total'] for r in rs)} | "
+                  f"{statistics.median(r['model_turns'] for r in rs):.0f} | {notes} / {sum(r['nudge_stall'] for r in rs)} |")
+    print()
+
+
 def main():
     labels = sys.argv[1:] or sorted(os.path.basename(p)[:-6] for p in glob.glob(os.path.join(HERE, "results", "*.jsonl")))
     for label in labels:
         rows = [json.loads(l) for l in open(os.path.join(HERE, "results", f"{label}.jsonl"))]
+        if rows and "scenario" in rows[0]:
+            inject_report(label, rows)
+            continue
         arms = {a: summary([r for r in rows if r["arm"] == a]) for a in ("base", "guard")}
         tasks = sorted({r["task"] for r in rows})
         rounds = max(r["round"] for r in rows)
