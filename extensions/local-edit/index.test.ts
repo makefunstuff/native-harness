@@ -208,3 +208,34 @@ test("the edit tool replaces pi's, keeps its schema, and applies a tolerant edit
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("a miss names the edit of the same call that writes the text", () => {
+	const src = "from datetime import datetime\n\nx = 1\n";
+	assert.throws(
+		() => resolveEdits(src, [{ oldText: "from datetime import datetime", newText: "from datetime import datetime, timezone" }, { oldText: "from datetime import datetime, timezone", newText: "from datetime import datetime, timezone\nfrom math import ceil" }], "p.py"),
+		/edits\[1\] is text that edits\[0\] of this same call writes/,
+	);
+});
+
+test("a long miss says where its first and last lines are", () => {
+	const lines = Array.from({ length: 30 }, (_, i) => `value_${i} = compute(${i})`);
+	const old = [lines[5], "something new = 1", "another new line = 2", "third new line = 3", "fourth = 4", lines[12]].join("\n");
+	assert.throws(() => resolveEdits(lines.join("\n"), [{ oldText: old, newText: "" }], "p.py"), /its first line is line 6, its last line is line 13 \(the file has 8 lines there, oldText has 6/);
+});
+
+test("a miss meant for another file names that file", async () => {
+	const pi = fakePi();
+	extension(pi as any);
+	const tool = pi.tools.get("edit");
+	const root = mkdtempSync(join(tmpdir(), "local-edit-"));
+	try {
+		writeFileSync(join(root, "a.py"), "def a():\n    return 1\n");
+		writeFileSync(join(root, "b.py"), "def b():\n    return compute_the_thing(2)\n");
+		await assert.rejects(
+			tool.execute("c", { path: "a.py", edits: [{ oldText: "    return compute_the_thing(2)", newText: "x" }] }, undefined, undefined, fakeCtx({ cwd: root })),
+			/That oldText is in b\.py: did you mean that file\?/,
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

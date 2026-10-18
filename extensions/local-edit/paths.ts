@@ -4,7 +4,7 @@
 //   - a basename or a partial path, looked up under the working directory: used when exactly one
 //     file ends with it.
 // Returns the path to use and a note for the model, or an error listing the candidates.
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const SKIP = new Set(["node_modules", ".git", ".hg", ".svn", "dist", "build", "target", ".venv", "venv", "__pycache__", ".cache", ".next", ".tox"]);
@@ -90,4 +90,41 @@ export function resolveEditPath(p: string, cwd: string): PathResolution {
 			return { path: p, error: `File not found: ${p}. Several files match; use the full path: ${rel.slice(0, 10).join(", ")}${hits.length > 10 ? ", …" : ""}` };
 	}
 	return { path: p };
+}
+
+/**
+ * Files under root (other than `exclude`) that contain `text` exactly: for a miss that was meant for
+ * another file. Bounded: small text files only, at most `budget` files read.
+ */
+export function findTextElsewhere(root: string, text: string, exclude: string, budget = 3000): string[] {
+	const needle = text.trim();
+	if (needle.length < 20) return [];
+	const found: string[] = [];
+	let read = 0;
+	const walk = (dir: string, depth: number) => {
+		if (depth > MAX_DEPTH || read >= budget || found.length >= 5) return;
+		let entries;
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const d of entries) {
+			if (read >= budget || found.length >= 5) return;
+			const p = join(dir, d.name);
+			if (d.isDirectory()) {
+				if (!SKIP.has(d.name) && !d.name.startsWith(".")) walk(p, depth + 1);
+				continue;
+			}
+			if (!d.isFile() || p === exclude) continue;
+			try {
+				if (statSync(p).size > 1_000_000) continue;
+				read++;
+				const body = readFileSync(p, "utf8").replace(/\r\n?/g, "\n");
+				if (body.includes(needle)) found.push(relative(root, p));
+			} catch {}
+		}
+	};
+	walk(root, 0);
+	return found;
 }

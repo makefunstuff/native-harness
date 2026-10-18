@@ -19,7 +19,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { compactDiff } from "./diff.ts";
 import { EditMatchError, closestCandidates, resolveEdits, type Edit } from "./match.ts";
-import { resolveEditPath } from "./paths.ts";
+import { findTextElsewhere, resolveEditPath } from "./paths.ts";
 
 const PATH_KEYS = ["path", "file_path", "filePath", "file", "filename", "file_name"];
 const OLD_KEYS = ["oldText", "old_text", "old_string", "oldString", "old", "search", "find"];
@@ -100,7 +100,15 @@ export default function (pi: ExtensionAPI) {
 						edits = r.edits;
 						notes.push(...r.notes);
 					} catch (e) {
-						if (e instanceof EditMatchError) throw new Error(e.message + (notes.length ? `\n(${notes.join("; ")})` : ""));
+						if (e instanceof EditMatchError) {
+							let msg = e.message;
+							if (/^Could not find/.test(msg)) {
+								const missing = edits.find((x) => typeof x?.oldText === "string" && !content!.includes(normalizeLF(x.oldText)));
+								const elsewhere = missing ? findTextElsewhere(cwd, normalizeLF(missing.oldText), abs) : [];
+								if (elsewhere.length) msg += `\nThat oldText is in ${elsewhere.join(", ")}: did you mean ${elsewhere.length > 1 ? "one of these files" : "that file"}?`;
+							}
+							throw new Error(msg + (notes.length ? `\n(${notes.join("; ")})` : ""));
+						}
 						throw e;
 					}
 				}

@@ -290,6 +290,24 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 	return region(best.start, best.size, `${Math.round(best.score * 1000) / 10}% similar`);
 }
 
+/** For a long oldText: where its first and last lines are in the file, when each is there once. */
+function anchorNote(fileLines: string[], oldLines: string[]): string {
+	const body = oldLines.filter((l) => l.trim());
+	if (body.length < 4) return "";
+	const where = (line: string) => {
+		const hits = fileLines.flatMap((l, i) => (norm(l) === norm(line) ? [i + 1] : []));
+		return hits.length === 1 ? hits[0] : undefined;
+	};
+	const a = where(body[0]);
+	const b = where(body[body.length - 1]);
+	const parts: string[] = [];
+	if (a) parts.push(`its first line is line ${a}`);
+	if (b) parts.push(`its last line is line ${b}`);
+	if (!parts.length) return "";
+	const span = a && b && b > a ? ` (the file has ${b - a + 1} lines there, oldText has ${oldLines.length}: lines in between differ)` : "";
+	return `\nFor this oldText: ${parts.join(", ")}${span}.`;
+}
+
 /** The closest places to oldText, for the error message. */
 export function closestCandidates(content: string, oldText: string, max = 3, context = 0): string {
 	const fileLines = content.split("\n");
@@ -313,7 +331,8 @@ export function closestCandidates(content: string, oldText: string, max = 3, con
 		picked.push(w);
 		if (picked.length >= max) break;
 	}
-	if (!picked.length) return "No similar lines found in the file. Read the file again before editing.";
+	const anchors = anchorNote(fileLines, oldLines);
+	if (!picked.length) return `No similar lines found in the file.${anchors} Read the file again before editing.`;
 	const width = String(fileLines.length).length;
 	const MAXLINES = 12;
 	const blocks = picked.map((w) => {
@@ -324,7 +343,7 @@ export function closestCandidates(content: string, oldText: string, max = 3, con
 		const label = w.size === 1 ? `line ${w.start + 1}` : `lines ${w.start + 1}-${w.start + w.size}`;
 		return `${label} (${Math.round(w.score * 100)}% similar):\n${shown.join("\n")}`;
 	});
-	return `Closest text in the file:\n${blocks.join("\n")}\nCopy oldText exactly from these lines (without the "N| " prefixes), or read the file again.`;
+	return `Closest text in the file:\n${blocks.join("\n")}${anchors}\nCopy oldText exactly from these lines (without the "N| " prefixes), or read the file again.`;
 }
 
 /**
@@ -393,6 +412,12 @@ export function resolveEdits(content: string, edits: Edit[], path: string): Reso
 			notes.push(`${label}: matched ${found.lines} (${found.how})`);
 			return;
 		}
+		const inserter = edits.findIndex((o, j) => j !== i && typeof o?.newText === "string" && piNormalize(o.newText).includes(piNormalize(e.oldText).trim()));
+		if (inserter !== -1)
+			throw new EditMatchError(
+				`${label} is text that edits[${inserter}] of this same call writes. All edits of one call are matched against the file as it was before the call, ` +
+					`so ${label} cannot see it: merge the two into one edit, or make this change in a later call.`,
+			);
 		throw new EditMatchError(
 			`Could not find ${many ? `edits[${i}]` : "the text"} in ${path}: no exact match, and no unique match at ≥${Math.round(SIMILARITY * 100)}% similarity.\n` +
 				closestCandidates(content, e.oldText),
