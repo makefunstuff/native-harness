@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <climits>
 
 static double now_ms() {
     using namespace std::chrono;
@@ -189,9 +190,19 @@ void Engine::checkpoint() {
     // keep sorted; drop any stale checkpoint past this point
     drop_checkpoints_after(c.n_tokens - 1);
     ckpts.push_back(std::move(c));
-    // evict: keep the first (stable prefix) and the most recent ones
+    // evict: keep the first (stable prefix) and the newest; drop the one in the densest spot so
+    // the remaining checkpoints stay spread over the whole conversation
     while ((int) ckpts.size() > max_ckpts && ckpts.size() > 2) {
-        ckpts.erase(ckpts.begin() + 1);
+        size_t best = 1;
+        int64_t best_gap = INT64_MAX;
+        for (size_t i = 1; i + 1 < ckpts.size(); ++i) {
+            const int64_t gap = ckpts[i + 1].n_tokens - ckpts[i - 1].n_tokens;
+            if (gap < best_gap) {
+                best_gap = gap;
+                best = i;
+            }
+        }
+        ckpts.erase(ckpts.begin() + best);
     }
     stats.n_checkpoints++;
     stats.t_ckpt_ms += now_ms() - t0;

@@ -94,6 +94,9 @@ Service::Service(const std::vector<std::string> & argv) : args(argv) {
         err = "failed to load the model";
         return;
     }
+    if (const char * mc = getenv("LLAMA_NATIVE_MAX_CKPT")) {
+        eng->set_max_checkpoints(std::max(2, atoi(mc)));
+    }
     eot_text = "<|im_end|>";
     const llama_token eot = llama_vocab_eot(eng->vocab());
     if (eot != LLAMA_TOKEN_NULL) eot_text = eng->piece(eot, true);
@@ -300,7 +303,7 @@ ojson Service::chat(const ojson & req, const std::function<void(const std::strin
         c.append(piece, t);
         acc.append(c);
         n_tok++;
-        if (n_tok % 8 == 0) {
+        if (n_tok == 1 || n_tok % 8 == 0) {
             try {
                 common_chat_parser_params pp;
                 pp.format = session.format();

@@ -20,13 +20,33 @@ export interface Native {
 }
 
 let pending: Promise<Native> | undefined;
+let pendingHelper: Promise<Native> | undefined;
 
+export function defaultAddon(): string {
+	return process.env.LLAMA_NATIVE_ADDON ?? join(HERE, "../../native/build/llama_native.node");
+}
+
+// the main model; a second sequence is needed for decisions / summaries on a fork of the cache
 export function getNative(argsFile: string, addonPath: string): Promise<Native> {
 	if (pending) return pending;
-	pending = (async () => {
+	pending = load(addonPath, [...readArgs(argsFile), "--parallel", "2", ...(process.env.LLAMA_NATIVE_EXTRA_ARGS?.split(/\s+/).filter(Boolean) ?? [])]);
+	pending.catch(() => (pending = undefined));
+	return pending;
+}
+
+// a second, small model in the same process (LLAMA_NATIVE_HELPER_ARGS)
+export function getHelper(): Promise<Native> {
+	if (pendingHelper) return pendingHelper;
+	const f = process.env.LLAMA_NATIVE_HELPER_ARGS;
+	if (!f) return Promise.reject(new Error("LLAMA_NATIVE_HELPER_ARGS is not set"));
+	pendingHelper = load(defaultAddon(), readArgs(f));
+	pendingHelper.catch(() => (pendingHelper = undefined));
+	return pendingHelper;
+}
+
+function load(addonPath: string, args: string[]): Promise<Native> {
+	return (async () => {
 		const m = require_(addonPath);
-		// a second sequence is needed for decisions / summaries on a fork of the cache
-		const args = [...readArgs(argsFile), "--parallel", "2", ...(process.env.LLAMA_NATIVE_EXTRA_ARGS?.split(/\s+/).filter(Boolean) ?? [])];
 		const t0 = performance.now();
 		const h = await m.load(args);
 		const loadMs = performance.now() - t0;
@@ -41,6 +61,4 @@ export function getNative(argsFile: string, addonPath: string): Promise<Native> 
 			loadMs,
 		} as Native;
 	})();
-	pending.catch(() => (pending = undefined));
-	return pending;
 }

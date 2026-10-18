@@ -14,12 +14,13 @@
 //   LLAMA_NATIVE_METRICS  JSONL file for per-request metrics (or a file named in "<path>.target")
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
-import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { installExperiments, experimentFlags } from "./experiments.ts";
+import { logMetrics } from "./metrics.ts";
 import { getNative } from "./native.ts";
 
 const HERE = dirname(realpathSync(fileURLToPath(import.meta.url)));
@@ -54,24 +55,11 @@ function mirroredModel(id: string): any {
 	return m;
 }
 
-function metricsPath(): string | undefined {
-	const p = process.env.LLAMA_NATIVE_METRICS;
-	if (!p) return undefined;
-	try {
-		const t = readFileSync(p + ".target", "utf8").trim();
-		if (t) return t;
-	} catch {}
-	return p;
-}
-
-export function logMetrics(rec: any) {
-	const p = metricsPath();
-	if (p) appendFileSync(p, JSON.stringify(rec) + "\n");
-}
-
 function sse(obj: any): Uint8Array {
 	return new TextEncoder().encode(`data: ${JSON.stringify(obj)}\n\n`);
 }
+
+let loadLogged = false;
 
 // fetch() for the OpenAI client: POST {BASE_URL}/chat/completions, answered in-process as an
 // OpenAI chat-completions SSE stream.
@@ -83,6 +71,10 @@ async function nativeFetch(input: any, init?: any): Promise<Response> {
 	const bodyText = typeof init?.body === "string" ? init.body : await new Response(init?.body).text();
 	const payload = JSON.parse(bodyText);
 	const native = await getNative(argsFile(), addonPath());
+	if (!loadLogged) {
+		loadLogged = true;
+		logMetrics({ kind: "load", ms: native.loadMs });
+	}
 	const signal: AbortSignal | undefined = init?.signal;
 	const req: any = {
 		messages: payload.messages,
@@ -133,12 +125,12 @@ async function nativeFetch(input: any, init?: any): Promise<Response> {
 				};
 				ctl.enqueue(sse(chunk({}, fin, { usage, timings: t })));
 				ctl.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-				logMetrics({ t: Date.now() / 1000, kind: "chat", total_ms: performance.now() - t0, ttft_ms: ttft ?? null,
+				logMetrics({ kind: "chat", total_ms: performance.now() - t0, ttft_ms: ttft ?? null,
 					n_messages: payload.messages?.length ?? 0, timings: t, parse_error: res.parse_error || undefined,
 					finish_reason: res.finish_reason });
 				ctl.close();
 			} catch (e: any) {
-				logMetrics({ t: Date.now() / 1000, kind: "chat", error: String(e?.message ?? e) });
+				logMetrics({ kind: "chat", error: String(e?.message ?? e) });
 				ctl.error(e);
 			} finally {
 				signal?.removeEventListener("abort", onAbort);
