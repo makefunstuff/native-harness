@@ -14,7 +14,9 @@
 //     llama-server reports prompt_n (tokens processed) and cache_n (tokens reused) per request.
 //
 // BASE_URL is the server root, e.g. http://my-gpu-box:8080 (not stored anywhere).
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { basename } from "node:path";
 import { DEFAULTS, noteFor, withBudget } from "../guard.ts";
 
@@ -32,58 +34,87 @@ interface Result {
 	reasoning_tail: string;
 }
 
-async function send(base: string, body: Record<string, unknown>, abortAfter?: number): Promise<Result> {
+// node:http rather than fetch: a request may queue behind others on a busy server for longer
+// than fetch's fixed 300 s headers timeout.
+function send(base: string, body: Record<string, unknown>, abortAfter?: number): Promise<Result> {
 	const t0 = Date.now();
-	const ctl = new AbortController();
-	const res = await fetch(`${base.replace(/\/+$/, "")}/v1/chat/completions`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ ...body, stream: true }),
-		signal: ctl.signal,
-	});
-	if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-	let reasoning = "", content = "", finish: string | null = null, timings: any, aborted = false, buf = "";
-	const tools = new Map<number, string>();
-	const decoder = new TextDecoder();
-	try {
-		for await (const chunk of res.body as any as AsyncIterable<Uint8Array>) {
-			buf += decoder.decode(chunk, { stream: true });
-			let nl: number;
-			while ((nl = buf.indexOf("\n")) >= 0) {
-				const line = buf.slice(0, nl).trim();
-				buf = buf.slice(nl + 1);
-				if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
-				const d = JSON.parse(line.slice(6));
-				if (d.timings) timings = d.timings;
-				for (const ch of d.choices ?? []) {
-					reasoning += ch.delta?.reasoning_content ?? "";
-					content += ch.delta?.content ?? "";
-					for (const tc of ch.delta?.tool_calls ?? []) if (tc.function?.name) tools.set(tc.index ?? 0, tc.function.name);
-					finish = ch.finish_reason ?? finish;
+	const url = new URL(`${base.replace(/\/+$/, "")}/v1/chat/completions`);
+	const data = JSON.stringify({ ...body, stream: true });
+	return new Promise((resolve, reject) => {
+		let reasoning = "", content = "", finish: string | null = null, timings: any, aborted = false, buf = "";
+		const tools = new Map<number, string>();
+		const done = () =>
+			resolve({
+				wall_s: Math.round((Date.now() - t0) / 100) / 10,
+				reasoning_chars: reasoning.length,
+				content_chars: content.length,
+				tool_calls: [...tools.values()],
+				finish,
+				budget_hit: reasoning.includes(DEFAULTS.budgetMessage.trim()),
+				aborted,
+				prompt_n: timings?.prompt_n,
+				cache_n: timings?.cache_n,
+				predicted_n: timings?.predicted_n,
+				reasoning_tail: reasoning.slice(-200),
+			});
+		const req = (url.protocol === "https:" ? httpsRequest : httpRequest)(
+			url,
+			{ method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(data) } },
+			(res) => {
+				if (res.statusCode !== 200) {
+					let err = "";
+					res.on("data", (c) => (err += c));
+					res.on("end", () => reject(new Error(`HTTP ${res.statusCode}: ${err}`)));
+					return;
 				}
-			}
-			if (abortAfter && reasoning.length >= abortAfter) {
-				aborted = true;
-				ctl.abort();
-				break;
-			}
+				res.setEncoding("utf8");
+				res.on("data", (chunk: string) => {
+					buf += chunk;
+					let nl: number;
+					while ((nl = buf.indexOf("\n")) >= 0) {
+						const line = buf.slice(0, nl).trim();
+						buf = buf.slice(nl + 1);
+						if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+						const d = JSON.parse(line.slice(6));
+						if (d.timings) timings = d.timings;
+						for (const ch of d.choices ?? []) {
+							reasoning += ch.delta?.reasoning_content ?? "";
+							content += ch.delta?.content ?? "";
+							for (const tc of ch.delta?.tool_calls ?? []) if (tc.function?.name) tools.set(tc.index ?? 0, tc.function.name);
+							finish = ch.finish_reason ?? finish;
+						}
+					}
+					if (abortAfter && !aborted && reasoning.length >= abortAfter) {
+						aborted = true;
+						req.destroy();
+						done();
+					}
+				});
+				res.on("end", () => !aborted && done());
+				res.on("error", (e) => !aborted && reject(e));
+			},
+		);
+		req.on("error", (e) => !aborted && reject(e));
+		req.end(data);
+	});
+}
+
+/** send(), retried when a busy server drops the connection or answers 5xx (e.g. while it swaps models). */
+async function sendRetrying(base: string, body: Record<string, unknown>, abortAfter?: number): Promise<Result> {
+	for (let attempt = 1; ; attempt++) {
+		try {
+			return await send(base, body, abortAfter);
+		} catch (e) {
+			if (attempt >= 4) throw e;
+			console.error(`retry ${attempt} after: ${(e as Error).message}`);
+			await new Promise((ok) => setTimeout(ok, 30_000 * attempt));
 		}
-	} catch (e) {
-		if (!aborted) throw e;
 	}
-	return {
-		wall_s: Math.round((Date.now() - t0) / 100) / 10,
-		reasoning_chars: reasoning.length,
-		content_chars: content.length,
-		tool_calls: [...tools.values()],
-		finish,
-		budget_hit: reasoning.includes(DEFAULTS.budgetMessage.trim()),
-		aborted,
-		prompt_n: timings?.prompt_n,
-		cache_n: timings?.cache_n,
-		predicted_n: timings?.predicted_n,
-		reasoning_tail: reasoning.slice(-200),
-	};
+}
+
+/** Rows already in OUT, to resume an interrupted run. */
+function existing(out: string): any[] {
+	return existsSync(out) ? readFileSync(out, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
 }
 
 function flag(args: string[], name: string, fallback: string): string {
@@ -107,12 +138,14 @@ async function main() {
 		const rounds = Number(flag(args, "--rounds", "1"));
 		const firstRound = Number(flag(args, "--first-round", "1"));
 		const [base, out, ...payloads] = args;
+		const have = new Set(existing(out).map((r) => `${r.case}#${r.round}#${r.arm}`));
 		for (let round = firstRound; round < firstRound + rounds; round++)
 			for (const file of payloads) {
 				const payload = JSON.parse(readFileSync(file, "utf8"));
 				for (const arm of arms) {
+					if (have.has(`${basename(file, ".json")}#${round}#${arm}`)) continue;
 					const body = arm === "on" ? withBudget(payload, DEFAULTS)! : payload;
-					record(out, { case: basename(file, ".json"), round, arm, ...(await send(base, body)) });
+					record(out, { case: basename(file, ".json"), round, arm, ...(await sendRetrying(base, body)) });
 				}
 			}
 	} else if (mode === "cache") {
@@ -129,11 +162,14 @@ async function main() {
 			["abort", payload, abortChars],
 			["reissue", reissue, undefined],
 		];
-		for (let trial = first; trial < first + trials; trial++)
+		const doneTrials = new Set(existing(out).filter((r) => r.step === "reissue").map((r) => r.trial));
+		for (let trial = first; trial < first + trials; trial++) {
+			if (doneTrials.has(trial)) continue;
 			for (const [step, body, abortAfter] of steps) {
-				record(out, { trial, step, ...(await send(base, body, abortAfter)) });
+				record(out, { trial, step, ...(await sendRetrying(base, body, abortAfter)) });
 				if (step === "abort") await new Promise((ok) => setTimeout(ok, 2000)); // let the server stop
 			}
+		}
 	} else {
 		console.error("usage: replay.ts replay|cache ... (see the header of this file)");
 		process.exit(2);
