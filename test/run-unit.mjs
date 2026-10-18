@@ -12,6 +12,7 @@ const walk = (dir) => {
 	for (const d of readdirSync(dir, { withFileTypes: true })) {
 		if (d.name === "node_modules" || d.name.startsWith(".")) continue;
 		const p = join(dir, d.name);
+		if (/[\\/]bench[\\/]tasks$/.test(p)) continue; // benchmark tickets: their tests are graded by the bench
 		if (d.isDirectory()) walk(p);
 		else if (/\.test\.(ts|mjs)$/.test(d.name)) files.push(p);
 	}
