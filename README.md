@@ -52,6 +52,17 @@ loaded into pi's Node process through a Node-API binding of libllama. The result
   `bench/longctx.py` (about an hour). If it pays, put per-message checkpoints and slot forks into
   llama-server rather than a binding; otherwise keep `llama-native` as an optional extra and stop.
 
+## Follow-up: d3 context management (HRN-2, 2026-10-18)
+
+Does letting the d3 decision model manage the agent's context (keep, summarise or drop old tool
+output; pin key lines; edit at subtask boundaries) make the agent solve more or waste less?
+**No.** With deepseek-flash as the agent, the solve rate was the same (every run passed in every
+arm). On the long sessions d3 cut the tokens processed by 32% and the median context by 38%, but
+cost was 44-55% higher, because every mid-context edit breaks the provider's prefix cache. The
+data is thin (2 runs per ticket and arm). Details: [RESULTS-d3-context.md](RESULTS-d3-context.md).
+Code: `extension/d3-context/` (a pi extension, loaded with `pi -e`), `bench/gen_long_tasks.py`
+(the long tickets in `bench/tasks-long/`), `bench/ctx_run.py`, `bench/ctx_report.py`.
+
 ## How it fits together
 
 ```

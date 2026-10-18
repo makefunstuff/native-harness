@@ -5,3 +5,6 @@ __pycache__/
 bench/work/
 results/raw/**/*.session/
 results/raw/*/
+results/ctx/raw/*/
+results/ctx/invalid/*/
+bench/tasks-long/

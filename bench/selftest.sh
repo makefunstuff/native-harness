@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # For every task: the broken repo must FAIL the hidden tests; repo + reference overlay must
 # PASS both the visible and the hidden tests.
-cd "$(dirname "$0")/tasks"
+# usage: bench/selftest.sh [TASKS_DIR]   (default bench/tasks; bench/tasks-long for the long tickets)
+cd "$(dirname "$0")/${1:-tasks}"
 for t in */; do t=${t%/}
-  w=$(mktemp -d); cp -r $t/repo/. $w/; cp $t/hidden_test.py $w/
+  w=$(mktemp -d -p "${TMPDIR:-$HOME/.cache/native-harness/tmp}"); cp -r $t/repo/. $w/; cp $t/hidden_test.py $w/
   (cd $w && timeout 60 python3 -m unittest hidden_test >/dev/null 2>&1) && b=PASS || b=fail
   cp -r $t/ref/. $w/
   (cd $w && timeout 60 python3 -m unittest hidden_test >/dev/null 2>&1) && h=PASS || h=FAIL
