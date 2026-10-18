@@ -1,0 +1,104 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { FixTracker, commandKey, errorExcerpt, isCheck } from "./detect.ts";
+import { LIMITS, askMessage, expired, keepScore, lessonsMessage, makeNote, merge, noteId, parseReply, rankByText, similarity, tokens } from "./note.ts";
+
+test("parseReply reads lesson blocks, continuation lines, confirms and contradicts", () => {
+	const r = parseReply(
+		[
+			"Here it is:",
+			"```lesson",
+			"cue: adding a new operation module under src/ops",
+			"lesson: list every exported function in src/registry.ts,",
+			"  the conventions test fails otherwise",
+			"evidence: tests/conventions.test.ts failed, passed after registering",
+			"confidence: 0.85",
+			"contradicts: L2",
+			"```",
+			"confirms: L1, lesson-abc",
+		].join("\n"),
+	);
+	assert.equal(r.notes.length, 1);
+	assert.equal(r.notes[0].cue, "adding a new operation module under src/ops");
+	assert.match(r.notes[0].lesson, /registry\.ts, the conventions test fails otherwise$/);
+	assert.equal(r.notes[0].confidence, 0.85);
+	assert.deepEqual(r.contradicts, ["L2"]);
+	assert.deepEqual(r.confirms, ["L1", "lesson-abc"]);
+});
+
+test("parseReply: no lesson, missing fields, bad confidence", () => {
+	assert.deepEqual(parseReply("no lesson"), { notes: [], confirms: [], contradicts: [] });
+	assert.equal(parseReply("```lesson\ncue: x\n```").notes.length, 0); // no lesson field
+	assert.equal(parseReply("```lesson\ncue: x\nlesson: y\nconfidence: lots\n```").notes[0].confidence, 0.6);
+	assert.equal(parseReply("```lesson\ncue: x\nlesson: y\nconfidence: 7\n```").notes[0].confidence, 1);
+});
+
+test("makeNote clips fields and derives a stable id from repo and cue words", () => {
+	const n = makeNote("r", { cue: "x ".repeat(300), lesson: "y".repeat(900), evidence: "z", confidence: 0.4 });
+	assert.ok(n.cue.length <= LIMITS.cue && n.lesson.length <= LIMITS.lesson);
+	assert.equal(noteId("r", "Rounding money amounts"), noteId("r", "money rounding  amount"));
+	assert.notEqual(noteId("r", "rounding"), noteId("other", "rounding"));
+});
+
+test("tokens split camelCase and drop stop words", () => {
+	assert.deepEqual(tokens("Use roundHalfEven for the VAT amounts"), ["round", "half", "even", "vat", "amount"]);
+});
+
+test("rankByText puts the note whose cue the task covers first", () => {
+	const a = makeNote("r", { cue: "rounding money amounts in an operation", lesson: "use roundHalfEven, not Math.round" });
+	const b = makeNote("r", { cue: "dates and calendar days", lesson: "use UTC getters" });
+	const ranked = rankByText("Add a VAT operation that returns the tax amount rounded to cents", [b, a]);
+	assert.equal(ranked[0].note.id, a.id);
+	assert.ok(ranked[0].score > ranked[1].score);
+});
+
+test("similarity, merge, keepScore and expiry", () => {
+	const a = makeNote("r", { cue: "new operation module", lesson: "register it in src/registry.ts", confidence: 0.6 });
+	const b = makeNote("r", { cue: "adding an operation module", lesson: "register the functions in src/registry.ts", confidence: 0.7 });
+	assert.ok(similarity(a, b) >= 0.6);
+	const m = merge(a, b);
+	assert.equal(m.id, a.id);
+	assert.equal(m.hits, 2);
+	assert.equal(m.confidence, 0.8);
+	const old = { ...a, updated: new Date(Date.now() - 200 * 86_400_000).toISOString() };
+	assert.ok(keepScore(old) < keepScore(a));
+	assert.ok(expired(old, 180));
+	assert.ok(!expired(old, 0));
+});
+
+test("messages name the shown lessons", () => {
+	const n = makeNote("r", { cue: "rounding", lesson: "half even", evidence: "test failed" });
+	assert.match(lessonsMessage([{ label: "L1", note: n }]), /L1\. When rounding: half even \(seen: test failed\)/);
+	const ask = askMessage([{ failed: "npm test", error: "1 failing" }], [{ label: "L1", note: n }]);
+	assert.match(ask, /`npm test` failed/);
+	assert.match(ask, /contradicts: L…/);
+	assert.doesNotMatch(askMessage([{ failed: "npm test", error: "x" }], []), /contradicts/);
+});
+
+test("commandKey strips cd, env, filters and redirections", () => {
+	assert.equal(commandKey("cd /tmp/x && CI=1 npm test 2>&1 | tail -20"), "npm test");
+	assert.equal(commandKey("timeout 60 node --test tests/"), "node --test tests/");
+	assert.ok(isCheck("npx tsc --noEmit"));
+	assert.ok(!isCheck("node scripts/gen.js"));
+});
+
+test("errorExcerpt prefers assertion lines", () => {
+	const out = "TAP version 13\nok 1 - a\nnot ok 2 - vat rounds\n  AssertionError: expected 13 to equal 12\n# pass 1\n# fail 1";
+	assert.match(errorExcerpt(out), /not ok 2 - vat rounds \| AssertionError: expected 13 to equal 12/);
+});
+
+test("FixTracker pairs a failure with a later pass of the same command or any check", () => {
+	const t = new FixTracker();
+	t.onBash("grep -rn foo src", true, "", 1); // a search that found nothing is not a failure
+	t.onBash("node gen.js", true, "Error: boom", 1);
+	t.onBash("npm test", true, "not ok 1 - x\nAssertionError: 1 !== 2", 1);
+	assert.equal(t.fixes.length, 0);
+	assert.equal(t.failures, 2);
+	t.onBash("cd /w && node --test tests/ 2>&1 | tail -5", false, "ok", 0); // another check passes
+	assert.deepEqual(t.fixes.map((f) => f.failed), ["npm test"]);
+	t.onBash("node gen.js", false, "done", 0); // same command passes
+	assert.deepEqual(t.fixes.map((f) => f.failed), ["npm test", "node gen.js"]);
+	t.onBash("npm test", true, "Command timed out after 60 seconds", 124);
+	t.onBash("npm test", false, "ok", 0);
+	assert.equal(t.fixes.length, 2, "a timeout is not a code failure");
+});
