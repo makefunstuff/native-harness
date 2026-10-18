@@ -33,11 +33,12 @@ test("parseReply: no lesson, missing fields, bad confidence", () => {
 	assert.equal(parseReply("```lesson\ncue: x\nlesson: y\nconfidence: 7\n```").notes[0].confidence, 1);
 });
 
-test("makeNote clips fields and derives a stable id from repo and cue words", () => {
+test("makeNote clips fields and derives a stable id from repo, cue words and lesson words", () => {
 	const n = makeNote("r", { cue: "x ".repeat(300), lesson: "y".repeat(900), evidence: "z", confidence: 0.4 });
 	assert.ok(n.cue.length <= LIMITS.cue && n.lesson.length <= LIMITS.lesson);
-	assert.equal(noteId("r", "Rounding money amounts"), noteId("r", "money rounding  amount"));
-	assert.notEqual(noteId("r", "rounding"), noteId("other", "rounding"));
+	assert.equal(noteId("r", "Rounding money amounts", "use roundHalfEven"), noteId("r", "money rounding  amount", "Use roundHalfEven."));
+	assert.notEqual(noteId("r", "rounding", "x"), noteId("other", "rounding", "x"));
+	assert.notEqual(noteId("r", "adding a new operation module", "give it tests/ops/<name>.spec.ts"), noteId("r", "adding a new operation module", "add a ## section to docs/operations.md"));
 });
 
 test("tokens split camelCase and drop stop words", () => {
@@ -50,6 +51,15 @@ test("rankByText puts the note whose cue the task covers first", () => {
 	const ranked = rankByText("Add a VAT operation that returns the tax amount rounded to cents", [b, a]);
 	assert.equal(ranked[0].note.id, a.id);
 	assert.ok(ranked[0].score > ranked[1].score);
+});
+
+test("similarity: a similar cue with a different lesson is not the same note", () => {
+	const codes = makeNote("r", { cue: "adding a new operation under src/ops", lesson: "list every new error code in src/codes.ts" });
+	const tests = makeNote("r", { cue: "adding an operation in src/ops", lesson: "give the operation its own test file tests/ops/<name>.spec.ts" });
+	assert.ok(similarity(codes, tests) < 0.6);
+	const short = makeNote("r", { cue: "adding an operation", lesson: "tests/ops spec" });
+	const long = makeNote("r", { cue: "adding an operation", lesson: "put the tests in tests/ops/<name>.spec.ts and document it in docs/operations.md and list its error codes" });
+	assert.ok(similarity(short, long) < 0.6, "a short note is not merged into a longer one just by being contained in it");
 });
 
 test("similarity, merge, keepScore and expiry", () => {
@@ -116,6 +126,13 @@ test("FixTracker pairs a failure with a later pass of the same command or any ch
 	assert.deepEqual(piped.fixes.map((f) => f.failed), ["npm test"], "a pipe hides the exit code; the output does not");
 	piped.onBash("npm test", false, "ℹ fail 1", 0);
 	assert.equal(piped.failures, 1, "without a pipe the exit code is trusted");
+	const commit = new FixTracker();
+	commit.onBash("npx tsc --noEmit", true, "error TS2322: x", 2);
+	commit.onBash("git commit -m 'fix test'", false, "", 0);
+	commit.onBash('echo "build ok"', false, "build ok", 0);
+	assert.equal(commit.fixes.length, 0, "a commit or an echo mentioning test/build is not a passing check");
+	commit.onBash("npx tsc --noEmit", false, "", 0);
+	assert.equal(commit.fixes.length, 1);
 	t.onBash("npm test", true, "Command timed out after 60 seconds", 124);
 	t.onBash("npm test", false, "ok", 0);
 	assert.equal(t.fixes.length, 2, "a timeout is not a code failure");

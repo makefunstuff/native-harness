@@ -19,7 +19,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { FixTracker } from "./detect.ts";
 import { judge } from "./judge.ts";
 import { type Note, askMessage, lessonsMessage, makeNote, parseReply } from "./note.ts";
-import { FileStore, HindsightStore, Library } from "./store.ts";
+import { CONFIRMED, CONTRADICTED, DEFAULT_LIBRARY, FileStore, HindsightStore, Library } from "./store.ts";
 
 export const CUSTOM_TYPE = "lessons";
 
@@ -123,7 +123,7 @@ export function lessons(pi: ExtensionAPI, config: Config) {
 					timeoutMs: config.hindsight.timeoutMs,
 				})
 			: undefined;
-		library = new Library(new FileStore(config.dir), hs, { maxNotes: config.maxNotes, ttlDays: config.ttlDays, dropBelow: 0.3, dedupe: 0.6 });
+		library = new Library(new FileStore(config.dir), hs, { maxNotes: config.maxNotes, ttlDays: config.ttlDays, dropBelow: DEFAULT_LIBRARY.dropBelow, dedupe: DEFAULT_LIBRARY.dedupe });
 		return library;
 	}
 
@@ -234,12 +234,12 @@ export function lessons(pi: ExtensionAPI, config: Config) {
 		const log: string[] = [];
 		for (const ref of reply.contradicts) {
 			const n = resolve(ref);
-			if (n) log.push(`${ref} ${await lib.adjust(repo!, n, -0.4, ctx.signal)} (contradicted)`);
+			if (n) log.push(`${ref} ${await lib.adjust(repo!, n, CONTRADICTED, ctx.signal)} (contradicted)`);
 		}
 		for (const ref of reply.confirms) {
 			const n = resolve(ref);
 			if (n && !reply.contradicts.includes(ref)) log.push(`${ref} confirmed`);
-			if (n && !reply.contradicts.includes(ref)) await lib.adjust(repo!, n, 0.1, ctx.signal);
+			if (n && !reply.contradicts.includes(ref)) await lib.adjust(repo!, n, CONFIRMED, ctx.signal);
 		}
 		for (const f of reply.notes.slice(0, 2)) {
 			const r = await lib.save(makeNote(repo!, f), ctx.signal);

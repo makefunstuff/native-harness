@@ -37,17 +37,27 @@ function segments(command: string): string[] {
 
 const isSearchSegment = (s: string) => SEARCH.test(s) && !/(^|\s)(>|>>|tee)\s/.test(s);
 
+// Commands that never run a check, whatever words their arguments contain (git commit -m "fix test").
+const NOT_A_CHECK = /^(git|gh|echo|printf|cd|ls|cat|grep|rg|find|sed|awk|mkdir|cp|mv|rm|touch|chmod|ln|curl|wget|tee|head|tail|wc|diff|true|false|export|sleep)\b/;
+
+// A check runs tests, a type check, a linter or a build: a check word outside quoted text, in a
+// command that can run one.
+function isCheckSegment(s: string): boolean {
+	if (NOT_A_CHECK.test(s) || isSearchSegment(s)) return false;
+	return CHECK.test(s.replace(/'[^']*'|"[^"]*"/g, " "));
+}
+
 // The part of a command that decides whether it "passed": its last check (`… && npm test &&
 // git status` is `npm test`), else its last command.
 export function commandKey(command: string): string {
 	const segs = segments(command);
 	if (!segs.length) return normalise(command);
-	const checks = segs.filter((s) => CHECK.test(s) && !isSearchSegment(s));
+	const checks = segs.filter(isCheckSegment);
 	return checks.at(-1) ?? segs.at(-1)!;
 }
 
 export function isCheck(command: string): boolean {
-	return segments(command).some((s) => CHECK.test(s) && !isSearchSegment(s));
+	return segments(command).some(isCheckSegment);
 }
 
 // Only looks, changes nothing: a non-zero exit is "no match", not a failure.

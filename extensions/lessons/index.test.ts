@@ -9,7 +9,7 @@ import { fakeCtx, fakePi } from "../../test/lib/fake-pi.ts";
 import { lessons, readConfig, repoKey } from "./index.ts";
 import { judge } from "./judge.ts";
 import { makeNote } from "./note.ts";
-import { FileStore, HindsightStore, Library } from "./store.ts";
+import { CONTRADICTED, FileStore, HindsightStore, Library } from "./store.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "lessons-test-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -19,6 +19,7 @@ const dir = () => join(tmp, `d${n++}`);
 // A stand-in for Hindsight's retain / recall / delete endpoints, keeping documents in memory.
 async function fakeHindsight(opts: { failRecall?: boolean; failRetain?: boolean } = {}) {
 	const docs = new Map<string, any>();
+	let deleteFails = false;
 	const seen: any[] = [];
 	const server = createServer(async (req, res) => {
 		let body = "";
@@ -44,6 +45,7 @@ async function fakeHindsight(opts: { failRecall?: boolean; failRetain?: boolean 
 			return reply(200, { results: results.flatMap((r) => [r, { ...r, scores: { final: r.scores.final / 10 } }]) });
 		}
 		const del = /\/documents\/([^/]+)$/.exec(req.url!);
+		if (req.method === "DELETE" && del && deleteFails) return reply(500, { detail: "delete failed" });
 		if (req.method === "DELETE" && del) {
 			docs.delete(decodeURIComponent(del[1]));
 			return reply(200, {});
@@ -52,7 +54,7 @@ async function fakeHindsight(opts: { failRecall?: boolean; failRetain?: boolean 
 	});
 	await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
 	const url = `http://127.0.0.1:${(server.address() as any).port}`;
-	return { url, docs, seen, close: () => new Promise<void>((ok) => server.close(() => ok())) };
+	return { url, docs, seen, failDelete: (v: boolean) => void (deleteFails = v), close: () => new Promise<void>((ok) => server.close(() => ok())) };
 }
 
 test("Library (files only): add, merge duplicates, cap, contradict until dropped, forget", async () => {
@@ -74,6 +76,51 @@ test("Library (files only): add, merge duplicates, cap, contradict until dropped
 	assert.equal(lib.files.list("r").length, 1);
 	assert.ok(await lib.forget("r", lib.files.list("r")[0].id));
 	assert.equal(lib.files.list("r").length, 0);
+});
+
+test("Library keeps different lessons learnt for the same or a similar cue", async () => {
+	const lib = new Library(new FileStore(dir()), undefined);
+	const a = await lib.save(makeNote("r", { cue: "adding a new operation module", lesson: "give it its own tests/ops/<name>.spec.ts file" }));
+	const b = await lib.save(makeNote("r", { cue: "adding a new operation module", lesson: "add a ## section for it to docs/operations.md" }));
+	const c = await lib.save(makeNote("r", { cue: "adding a new operation under src/ops", lesson: "list every new error code in src/codes.ts" }));
+	const d = await lib.save(makeNote("r", { cue: "adding an operation in src/ops", lesson: "give the operation its own test file" }));
+	assert.deepEqual([a.action, b.action, c.action, d.action], ["added", "added", "added", "added"]);
+	assert.equal(lib.files.list("r").length, 4);
+	const again = await lib.save(makeNote("r", { cue: "adding an operation module", lesson: "give it its own tests/ops/<name>.spec.ts" }));
+	assert.equal(again.action, "merged", "the same lesson written again is merged");
+	assert.equal(again.note.id, a.note.id);
+	assert.equal(lib.files.list("r").length, 4);
+});
+
+test("a note at the default confidence survives one contradiction and goes after the second", async () => {
+	const lib = new Library(new FileStore(dir()), undefined);
+	const s = await lib.save(makeNote("r", { cue: "c", lesson: "l" })); // no confidence given: 0.6
+	assert.equal(await lib.adjust("r", s.note, CONTRADICTED), "updated");
+	assert.equal(await lib.adjust("r", lib.files.list("r")[0], CONTRADICTED), "dropped");
+	const hi = await lib.save(makeNote("r", { cue: "c2", lesson: "l2", confidence: 0.9 }));
+	assert.equal(await lib.adjust("r", hi.note, CONTRADICTED), "updated");
+	assert.equal(await lib.adjust("r", lib.files.list("r")[0], CONTRADICTED), "updated");
+	assert.equal(await lib.adjust("r", lib.files.list("r")[0], CONTRADICTED), "dropped");
+});
+
+test("a note deleted here does not come back from Hindsight when the delete failed; the delete is retried", async () => {
+	const h = await fakeHindsight();
+	try {
+		const lib = new Library(new FileStore(dir()), new HindsightStore({ url: h.url, bank: "b", timeoutMs: 5000 }));
+		const s = await lib.save(makeNote("r", { cue: "rounding money amounts", lesson: "use roundHalfEven" }));
+		h.failDelete(true);
+		assert.ok(await lib.forget("r", s.note.id));
+		assert.ok(h.docs.has(s.note.id), "Hindsight still has it");
+		assert.match(lib.errors.at(-1)!, /Hindsight delete failed/);
+		const rec = await lib.recall("r", "rounding money amounts", 5);
+		assert.equal(rec.candidates.length, 0, "the tombstone hides it");
+		h.failDelete(false);
+		await lib.recall("r", "anything", 5);
+		assert.ok(!h.docs.has(s.note.id), "the delete was retried");
+		assert.equal(lib.files.removed("r")[s.note.id].pending, false);
+	} finally {
+		await h.close();
+	}
 });
 
 test("Library drops notes past their time to live", async () => {
@@ -235,7 +282,7 @@ test("extension: fixed failure → lesson request → stored → shown in the ne
 	const [ask2] = await pi.emit("agent_before_settle", { outcome: "completed", continue: false, entries: [] }, ctx);
 	assert.match(ask2.entries[0].content, /Lessons L1 were shown/);
 	await pi.emit("message_end", { message: { role: "assistant", content: [{ type: "text", text: "no lesson\ncontradicts: L1" }] } }, ctx);
-	assert.equal(new FileStore(d).list("ledger")[0].confidence.toFixed(1), "0.4");
+	assert.equal(new FileStore(d).list("ledger")[0].confidence.toFixed(1), "0.5");
 	await pi.emit("session_start", { reason: "new" }, ctx);
 	await pi.emit("before_agent_start", { messageType: "user", prompt: "Add a refund operation under src/ops", systemPromptOptions: {} }, ctx);
 	await bash("npm test", false, "x");

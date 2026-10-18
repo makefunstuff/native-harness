@@ -48,10 +48,14 @@ session 2   user: Add applyDiscount(...) in src/ops/discount.ts …
   - Size: cue ≤ 200, lesson ≤ 500, evidence ≤ 400 characters (evidence shown cut to 160).
   - Count: at most `LESSONS_MAX` (40) notes per repository. Over the cap, the lowest confidence ×
     age decay (60-day half-life) goes first.
-  - Duplicates: the same cue words give the same id, and a note sharing most words of cue and
-    lesson with an existing one is merged (newer wording, confidence +0.1).
-  - Contradicted: −0.4 confidence; below 0.3 the note is deleted. A note proved wrong once loses
-    weight; proved wrong twice, it is gone. Confirmed: +0.1.
+  - Duplicates: only the same lesson is merged (newer wording, confidence +0.1): the same cue and
+    lesson words, or a related cue (≥ 30 % shared words) with a lesson sharing ≥ 60 % of the two
+    lessons' words. A different lesson learnt for the same situation is kept beside the first.
+  - Contradicted: −0.3 confidence; below 0.25 the note is deleted. A note at the default
+    confidence (0.6, also used when the agent gives none) goes after its second contradiction, a
+    0.9 one after its third. Confirmed: +0.1.
+  - Deleted notes (contradicted, forgotten, evicted) leave a tombstone in the local copy, so
+    Hindsight cannot bring them back. A failed Hindsight delete is retried on a later recall.
   - Unused: notes not written or confirmed for `LESSONS_TTL_DAYS` (180) are dropped.
 - **Per repository.** The key is the origin remote (host/path, credentials stripped), else
   `package.json`'s name, else the folder name (`LESSONS_REPO` overrides it).
@@ -120,7 +124,7 @@ are in [`bench/results/`](bench/results/), and the full table with per-position 
 | arm | tickets | passed | **repeated mistakes** | mistakes / ticket 1 | mistakes / later ticket | later tickets with no mistake | turns / ticket | tokens / ticket |
 |---|---|---|---|---|---|---|---|---|
 | base | 40 | 40 | **17 / 41 (41 %)** | 0.88 | 0.72 | 16 / 32 | 10.5 | 85.0k |
-| lessons (Hindsight + Jev, see note) | 40 | 40 | **0 / 36 (0 %)**, p < 0.001 | 0.50 | 0.28 | 25 / 32 | 10.0 | 80.8k |
+| lessons: local copy + Jev (Hindsight writes failed, see note) | 40 | 40 | **0 / 36 (0 %)**, p < 0.001 | 0.50 | 0.28 | 25 / 32 | 10.0 | 80.8k |
 | lessons-file (plain text, no judge) | 20 | 20 | **0 / 17 (0 %)**, p = 0.001 | 0.75 | 0.13 | 14 / 16 | 10.5 | 91.3k |
 
 (p: Fisher's exact test against base. Tokens = input + cache read + output, the lesson request
@@ -142,6 +146,16 @@ included. The DeepSeek provider reports no cost, so there is no dollar column.)
     9.6, because fewer check-fix rounds were needed. lessons-file used more tokens (91.3k) over
     only 20 tickets: two first tickets with long explorations (13.5 turns on ticket 1 against 9.9
     in base) weigh heavily there.
+- **Library code changed after these runs** (review fixes):
+  - Dedupe now merges only the same lesson, never a different lesson under a similar cue.
+  - A contradiction costs −0.3 instead of −0.4.
+  - Deleted notes leave a tombstone.
+  - A commit message or echo that mentions "test" no longer counts as a passing check.
+
+  The runs hit the old merge once (dayplan round 3). There, a newer note restating the
+  `@example` rule and adding the CHANGELOG rule replaced the older note. That was a superset, so
+  nothing was lost; under the new rule both would be kept. They hit no contradiction, so the
+  numbers above stand.
 - **Jev** kept 25 of 26 candidates (p 0.73–0.95). The one it rejected was right to go: a note
   about unpacking the bundled checker's base64 payload, offered for a ticket that only needed to
   add an operation.

@@ -23,9 +23,11 @@ export function clip(s: string, max: number): string {
 	return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
-export function noteId(repo: string, cue: string): string {
-	const norm = tokens(cue).sort().join(" ") || cue.toLowerCase().trim();
-	return `lesson-${createHash("sha256").update(`${repo}\n${norm}`).digest("hex").slice(0, 16)}`;
+// The same lesson (cue and lesson words) in the same repo is the same note. Two different
+// lessons under the same cue get different ids and are both kept.
+export function noteId(repo: string, cue: string, lesson: string): string {
+	const norm = (t: string) => [...new Set(tokens(t))].sort().join(" ") || t.toLowerCase().trim();
+	return `lesson-${createHash("sha256").update(`${repo}\n${norm(cue)}\n${norm(lesson)}`).digest("hex").slice(0, 16)}`;
 }
 
 export function clampConfidence(x: unknown, fallback = 0.6): number {
@@ -36,12 +38,13 @@ export function clampConfidence(x: unknown, fallback = 0.6): number {
 
 export function makeNote(repo: string, f: { cue: string; lesson: string; evidence?: string; confidence?: unknown }, now = new Date()): Note {
 	const cue = clip(f.cue, LIMITS.cue);
+	const lesson = clip(f.lesson, LIMITS.lesson);
 	const t = now.toISOString();
 	return {
-		id: noteId(repo, cue),
+		id: noteId(repo, cue, lesson),
 		repo,
 		cue,
-		lesson: clip(f.lesson, LIMITS.lesson),
+		lesson,
 		evidence: clip(f.evidence ?? "", LIMITS.evidence),
 		confidence: clampConfidence(f.confidence),
 		created: t,
@@ -146,14 +149,22 @@ export function rankByText(query: string, notes: Note[]): Array<{ note: Note; sc
 		.sort((a, b) => b.score - a.score);
 }
 
-// Two notes say the same thing: same id, or most words of cue and lesson shared.
-export function similarity(a: Pick<Note, "cue" | "lesson">, b: Pick<Note, "cue" | "lesson">): number {
-	const x = new Set(tokens(`${a.cue} ${a.lesson}`));
-	const y = new Set(tokens(`${b.cue} ${b.lesson}`));
+function jaccard(a: string, b: string): number {
+	const x = new Set(tokens(a));
+	const y = new Set(tokens(b));
 	if (!x.size || !y.size) return 0;
 	let both = 0;
 	for (const t of x) if (y.has(t)) both++;
-	return both / Math.min(x.size, y.size);
+	return both / (x.size + y.size - both);
+}
+
+// How much two notes say the same thing: the overlap of their lesson words (shared words over
+// all words of both, so a short note cannot match a long one by being contained in it), and 0
+// when their cues have little in common. A similar cue alone never makes two notes the same: the
+// lesson decides, so a different lesson learnt for the same situation is kept beside the first.
+export function similarity(a: Pick<Note, "cue" | "lesson">, b: Pick<Note, "cue" | "lesson">): number {
+	if (jaccard(a.cue, b.cue) < 0.3) return 0;
+	return jaccard(a.lesson, b.lesson);
 }
 
 // Merge a new note into an existing one that says the same thing: keep the id and creation time,
