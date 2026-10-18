@@ -1,8 +1,10 @@
-Invoices are off by a cent. `src/billing/invoice.py` rounds line totals with `round()`, which
-does banker's rounding on floats: 2 x 1.005 comes out as 2.00 instead of 2.01.
+Invoices are off by a cent. `src/billing/invoice.ts` multiplies floats: one item at "1.005"
+comes out as 100 cents instead of 101.
 
-`line_total(qty, unit_price)` and `invoice_total(lines)` must round half up to whole cents
-(use `decimal.Decimal` with `ROUND_HALF_UP`) and return a `Decimal`. `invoice_total` sums the
-rounded line totals. A negative quantity must raise ValueError.
+`lineTotal(qty, unitPrice)` takes the unit price as a decimal string ("1.005", "12", "0.3333")
+and must return integer cents, rounded half up on the exact decimal value (1 x "1.005" = 101,
+3 x "0.3333" = 100, 1 x "0.125" = 13). `invoiceTotal(lines)` sums the rounded line totals.
+A quantity that is negative or not an integer, or a price that is not a plain non-negative
+decimal number, must throw a RangeError.
 
 Run the tests with `make test`.
