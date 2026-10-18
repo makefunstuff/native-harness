@@ -96,12 +96,12 @@ class Proxy:
                         self.send_header(k, v)
                 self.send_header("connection", "close")
                 self.end_headers()
-                while True:
-                    chunk = r.read1(65536) if hasattr(r, "read1") else r.read(65536)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
+                try:
+                    while chunk := (r.read1(65536) if hasattr(r, "read1") else r.read(65536)):
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # pi gave up on this request (abort, timeout); it retries or ends the run
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
