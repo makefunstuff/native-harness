@@ -1,0 +1,42 @@
+{
+ "local": {
+  "sessions": 20,
+  "edits": 82,
+  "failed": 8,
+  "failedKnown": 5,
+  "unreliable": 0,
+  "recovered": 1,
+  "recoveredHow": {
+   "similarity": 1
+  },
+  "stillFailing": 4,
+  "stillHow": {
+   "not found (candidates shown)": 3,
+   "other": 1
+  },
+  "pathFailed": 0,
+  "pathRecovered": 0,
+  "okKnown": 32,
+  "okSame": 32,
+  "okDifferent": 0
+ },
+ "cloud": {
+  "sessions": 233,
+  "edits": 277,
+  "failed": 4,
+  "failedKnown": 2,
+  "unreliable": 0,
+  "recovered": 0,
+  "recoveredHow": {},
+  "stillFailing": 2,
+  "stillHow": {
+   "not found (nothing similar)": 1,
+   "ambiguous (lines listed)": 1
+  },
+  "pathFailed": 0,
+  "pathRecovered": 0,
+  "okKnown": 92,
+  "okSame": 92,
+  "okDifferent": 0
+ }
+}
