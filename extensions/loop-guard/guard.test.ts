@@ -97,6 +97,10 @@ test("stallIntent: catches announced actions", () => {
 		"**Let me check the config file.**",
 		"Let me check if the tests pass.",
 		"Let me fix the test that isn't passing.",
+		"I'll fix the bug once and for all.",
+		"Now I need to update the tests until they pass.",
+		"Let me look at when the timeout fires.",
+		"I'll keep going with the refactor.",
 	])
 		assert.ok(stallIntent(t), t);
 	assert.equal(stallIntent("Done. Now let me run the tests:"), "let me run the tests");
@@ -135,6 +139,10 @@ test("stallIntent: waiting, conditions, negations and questions are not stalls",
 		"Say go, or pick numbers. I'll build them once that agent finishes.",
 		"And I will not touch your relaunched app.",
 		"I'll watch the next update.",
+		"I'll keep you posted.",
+		"I'll comment if that pattern appears.",
+		"I'll review the final guide for completeness when it's delivered.",
+		"The build is running; I'll check the logs after it finishes.",
 		"Fixed the bug. I should note that the old API is deprecated.",
 		"All tests pass. Let's recap: the change renames foo.",
 		"Done. I need to mention that you must restart the server.",

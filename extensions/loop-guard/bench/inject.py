@@ -179,25 +179,25 @@ def main():
     if os.path.exists(out):
         done = {(r["arm"], r["scenario"], r["round"]) for r in map(json.loads, open(out))}
     run_args = argparse.Namespace(label=args.label, model=f"inject/{args.model}", thinking=args.thinking, timeout=args.timeout)
-    with open(out, "a") as f:
-        for rnd in range(1, args.rounds + 1):
-            for i, sc in enumerate(args.scenarios.split(",")):
-                _, ticket, script = SCENARIOS[sc]
-                for arm in (("base", "guard") if (i + rnd) % 2 == 0 else ("guard", "base")):
-                    if (arm, sc, rnd) in done:
-                        continue
-                    proxy.reset(script)
-                    t = tickets[ticket]
-                    named = bench.Ticket(f"{sc}", t.seed, t.prompt, t.grade)
-                    row = bench.run(run_args, arm, named, rnd)
-                    row.update(scenario=sc, task=ticket, model=f"{args.provider}/{args.model}",
-                               **analyse(os.path.join(bench.CACHE, "sessions", args.label, arm, f"{sc}-r{rnd}"), script))
+    # one append per row: the file may be replaced (a checkout or stash) while a run goes on
+    for rnd in range(1, args.rounds + 1):
+        for i, sc in enumerate(args.scenarios.split(",")):
+            _, ticket, script = SCENARIOS[sc]
+            for arm in (("base", "guard") if (i + rnd) % 2 == 0 else ("guard", "base")):
+                if (arm, sc, rnd) in done:
+                    continue
+                proxy.reset(script)
+                t = tickets[ticket]
+                named = bench.Ticket(f"{sc}", t.seed, t.prompt, t.grade)
+                row = bench.run(run_args, arm, named, rnd)
+                row.update(scenario=sc, task=ticket, model=f"{args.provider}/{args.model}",
+                           **analyse(os.path.join(bench.CACHE, "sessions", args.label, arm, f"{sc}-r{rnd}"), script))
+                with open(out, "a") as f:
                     f.write(json.dumps(row) + "\n")
-                    f.flush()
-                    print(f"{args.label} {arm:5} {sc:10} r{rnd} {'PASS' if row['passed'] else 'FAIL'} {row['wall_s']}s "
-                          f"first_repeat={row['first_call_repeats']} repeats={row['repeats_total']} model_turns={row['model_turns']} "
-                          f"notes={row['note_retry']}/{row['note_repeat']}/{row['note_streak']} nudges={row['nudge_stall']}"
-                          f"{' TIMEOUT' if row['timed_out'] else ''}", flush=True)
+                print(f"{args.label} {arm:5} {sc:10} r{rnd} {'PASS' if row['passed'] else 'FAIL'} {row['wall_s']}s "
+                      f"first_repeat={row['first_call_repeats']} repeats={row['repeats_total']} model_turns={row['model_turns']} "
+                      f"notes={row['note_retry']}/{row['note_repeat']}/{row['note_streak']} nudges={row['nudge_stall']}"
+                      f"{' TIMEOUT' if row['timed_out'] else ''}", flush=True)
 
 
 if __name__ == "__main__":

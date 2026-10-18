@@ -199,20 +199,20 @@ def main():
     if os.path.exists(out):
         done = {(r["arm"], r["task"], r["round"]) for r in map(json.loads, open(out))}
     arms = args.arms.split(",")
-    with open(out, "a") as f:
-        for rnd in range(1, args.rounds + 1):
-            for i, t in enumerate(tickets):
-                # alternate which arm goes first, so neither always gets the warmer cache
-                for arm in (arms if (i + rnd) % 2 == 0 else arms[::-1]):
-                    if (arm, t.name, rnd) in done:
-                        continue
-                    r = run(args, arm, t, rnd)
+    # one append per row: the file may be replaced (a checkout or stash) while a run goes on
+    for rnd in range(1, args.rounds + 1):
+        for i, t in enumerate(tickets):
+            # alternate which arm goes first, so neither always gets the warmer cache
+            for arm in (arms if (i + rnd) % 2 == 0 else arms[::-1]):
+                if (arm, t.name, rnd) in done:
+                    continue
+                r = run(args, arm, t, rnd)
+                with open(out, "a") as f:
                     f.write(json.dumps(r) + "\n")
-                    f.flush()
-                    print(f"{args.label} {arm:5} {t.name} r{rnd} {'PASS' if r['passed'] else 'FAIL'} {r['wall_s']}s "
-                          f"turns={r.get('turns')} calls={r.get('calls')} err={r.get('errors')} exact={r.get('exactRetry')} "
-                          f"notes={r['note_retry']}/{r['note_repeat']}/{r['note_streak']} stall={r.get('stall')} "
-                          f"nudges={r['nudge_stall']}{' TIMEOUT' if r['timed_out'] else ''}", flush=True)
+                print(f"{args.label} {arm:5} {t.name} r{rnd} {'PASS' if r['passed'] else 'FAIL'} {r['wall_s']}s "
+                      f"turns={r.get('turns')} calls={r.get('calls')} err={r.get('errors')} exact={r.get('exactRetry')} "
+                      f"notes={r['note_retry']}/{r['note_repeat']}/{r['note_streak']} stall={r.get('stall')} "
+                      f"nudges={r['nudge_stall']}{' TIMEOUT' if r['timed_out'] else ''}", flush=True)
 
 
 if __name__ == "__main__":
