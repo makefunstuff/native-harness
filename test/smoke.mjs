@@ -53,14 +53,15 @@ async function runSpec(spec) {
 	const realModel = spec.realModel;
 	const mock = realModel ? null : await startMockModel(spec.respond);
 	const agent = makeAgentDir({ mockUrl: mock?.url, extensions: spec.extensions });
+	const cwd = spec.cwd?.(); // a throw-away working directory the spec prepared, removed afterwards
 	try {
-		const res = await runPi(agent, ["-p", "--model", realModel ?? spec.model ?? MOCK_MODEL, ...(spec.args ?? []), spec.prompt], { timeoutMs: spec.timeoutMs, env: spec.env });
+		const res = await runPi(agent, ["-p", "--model", realModel ?? spec.model ?? MOCK_MODEL, ...(spec.args ?? []), spec.prompt], { timeoutMs: spec.timeoutMs, env: spec.env, cwd });
 		const out = `--- stdout\n${res.stdout}\n--- stderr\n${res.stderr}`;
 		if (res.code !== 0) throw new Error(`pi exited with ${res.code ?? res.signal}\n${out}`);
 		if (EXTENSION_ERROR.test(res.stderr + res.stdout)) throw new Error(`extension error reported\n${out}`);
 		if (mock && mock.requests.length === 0) throw new Error(`the model was never called\n${out}`);
 		try {
-			await spec.check?.(res, mock);
+			await spec.check?.(res, mock, cwd);
 		} catch (e) {
 			e.message += `\n${out}`;
 			throw e;
@@ -68,6 +69,7 @@ async function runSpec(spec) {
 	} finally {
 		await mock?.close();
 		removeAgentDir(agent);
+		if (cwd) rmSync(cwd, { recursive: true, force: true });
 	}
 }
 
