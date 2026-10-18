@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -125,4 +125,18 @@ test("PI_VERIFY_GATE=rule-only: rule, no gate", async () => {
 	verifyGate(pi as any, { ...config, gate: false });
 	assert.equal(pi.handlers.get("agent_before_settle"), undefined);
 	assert.equal(pi.handlers.get("before_agent_start")?.length, 1);
+});
+
+test("/verify does not run the check in an untrusted project", async () => {
+	const pi = fakePi();
+	verifyGate(pi as any, config);
+	const cwd = project();
+	writeFileSync(join(cwd, ".pi", "verify"), "touch ran\n");
+	const ctx = fakeCtx({ cwd, isProjectTrusted: () => false });
+	await pi.commands.get("verify").handler("", ctx);
+	assert.match(ctx.notes[0].message, /untrusted/);
+	assert.equal(existsSync(join(cwd, "ran")), false);
+	const trusted = fakeCtx({ cwd, isProjectTrusted: () => true });
+	await pi.commands.get("verify").handler("", trusted);
+	assert.equal(existsSync(join(cwd, "ran")), true);
 });

@@ -36,7 +36,8 @@ export const EDIT_TOOLS = new Set(["edit", "write", "multiedit", "multi_edit", "
 
 // --- finding the check -------------------------------------------------------------------------
 
-// Folders from cwd up to the repository root (the first folder with .git), or to / when there is none.
+// Folders from cwd up to the repository root (the first folder with .git). Outside a git
+// repository only cwd itself: a parent folder (the home folder, say) is not this project.
 export function searchDirs(cwd: string): string[] {
 	const out: string[] = [];
 	let dir = cwd;
@@ -44,7 +45,7 @@ export function searchDirs(cwd: string): string[] {
 		out.push(dir);
 		if (existsSync(join(dir, ".git"))) return out;
 		const up = dirname(dir);
-		if (up === dir) return out;
+		if (up === dir) return [cwd];
 		dir = up;
 	}
 }
@@ -52,12 +53,13 @@ export function searchDirs(cwd: string): string[] {
 // The check command in an AGENTS.md, in one of three explicit forms (anything else is ignored, so
 // the gate never runs a command it guessed from prose):
 //   <!-- verify: make test -->
-//   Verify: `make test`            (also "Check:", "Check command:", bulleted or bold)
+//   Verify: `make test`            (also "Check:", "Check command:", bulleted or bold; the command
+//                                  must end the line, so "Check: `the docs` before …" is prose)
 //   ## Verify                      (also "Check", "Checks"): the first fenced code block of that section
 export function parseAgentsMd(text: string): string | undefined {
 	const comment = text.match(/<!--\s*verify:\s*([\s\S]*?)\s*-->/i);
 	if (comment?.[1].trim()) return comment[1].trim();
-	const line = text.match(/^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?(?:verify|check)(?:[ \t]+command)?(?:\*\*)?[ \t]*:(?:\*\*)?[ \t]*`([^`\n]+)`/im);
+	const line = text.match(/^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?(?:verify|check)(?:[ \t]+command)?(?:\*\*)?[ \t]*:(?:\*\*)?[ \t]*`([^`\n]+)`[ \t]*\.?[ \t]*$/im);
 	if (line) return line[1].trim();
 	const lines = text.split("\n");
 	for (let i = 0; i < lines.length; i++) {
@@ -86,8 +88,8 @@ export function findCheck(cwd: string): Check | undefined {
 			const text = readFileSync(verify, "utf8");
 			const label = firstCommandLine(text) ?? ".pi/verify";
 			if (isExecutable(verify)) return { file: verify, source: ".pi/verify", root: dir, label };
-			if (!text.trim()) continue;
-			return { script: text, source: ".pi/verify", root: dir, label };
+			if (text.trim()) return { script: text, source: ".pi/verify", root: dir, label };
+			// an empty .pi/verify: fall through to this folder's AGENTS.md
 		}
 		const agents = join(dir, "AGENTS.md");
 		if (existsSync(agents)) {

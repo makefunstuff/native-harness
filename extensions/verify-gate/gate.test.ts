@@ -122,3 +122,26 @@ test("failureMessage names the command, the round and the output", () => {
 	assert.match(m, /FAILED test_x/);
 	assert.match(m, /Do not weaken/);
 });
+
+test("parseAgentsMd: a Check:/Verify: line is a command only when the command ends the line", () => {
+	assert.equal(parseAgentsMd("Check: `the docs` before committing"), undefined);
+	assert.equal(parseAgentsMd("Verify: `npm test`."), "npm test");
+	assert.equal(parseAgentsMd("- Check: `make check`   "), "make check");
+});
+
+test("findCheck: outside a git repository only cwd is searched", () => {
+	const parent = tmp();
+	writeFileSync(join(parent, "AGENTS.md"), "Verify: `echo PARENT`\n");
+	mkdirSync(join(parent, "child"));
+	assert.equal(findCheck(join(parent, "child")), undefined);
+	assert.equal(findCheck(parent)?.script, "echo PARENT");
+});
+
+test("findCheck: an empty .pi/verify falls through to the AGENTS.md beside it", () => {
+	const root = tmp();
+	mkdirSync(join(root, ".git"));
+	mkdirSync(join(root, ".pi"));
+	writeFileSync(join(root, ".pi", "verify"), "\n");
+	writeFileSync(join(root, "AGENTS.md"), "Verify: `echo hi`\n");
+	assert.equal(findCheck(root)?.source, "AGENTS.md");
+});

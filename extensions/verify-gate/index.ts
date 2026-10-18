@@ -118,6 +118,10 @@ export function verifyGate(pi: ExtensionAPI, config: Config) {
 				ctx.ui.notify("verify-gate: no check command (.pi/verify, or Verify: / ## Verify in AGENTS.md)", "warning");
 				return;
 			}
+			if (!ctx.isProjectTrusted()) {
+				ctx.ui.notify(`verify-gate: not running ${check.source} in an untrusted project`, "warning");
+				return;
+			}
 			ctx.ui.setStatus(CUSTOM_TYPE, `verify-gate: ${check.label}`);
 			const res = await runCheck(check, { timeoutMs: config.timeoutMs });
 			ctx.ui.setStatus(CUSTOM_TYPE, undefined);

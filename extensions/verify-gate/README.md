@@ -14,13 +14,15 @@ session analysis).
 
 ## The check command
 
-It looks from the working directory up to the repository root. In each folder it checks
-`.pi/verify` first, then `AGENTS.md`:
+It looks from the working directory up to the repository root (the first folder with `.git`).
+Outside a git repository it looks only in the working directory itself, so an `AGENTS.md` in a
+parent folder, such as the home folder, is never taken for the project's. In each folder it
+checks `.pi/verify` first, then `AGENTS.md`. An empty `.pi/verify` counts as none.
 
 - **`.pi/verify`**: a shell script. Executable files are run as they are; other files are run
   with `bash`. It runs in the folder that holds `.pi/`. For example:
   ```sh
-  python3 -m unittest discover -s tests
+  npm test
   ```
 - **`AGENTS.md`**, in one of three explicit forms. Prose is never read for commands, so the gate
   only runs a command someone wrote down for it:
@@ -29,6 +31,8 @@ It looks from the working directory up to the repository root. In each folder it
   Verify: `npm test`             (also "Check:", "Check command:", bulleted or bold)
   ## Verify                      (also "Check", "Checks"): the first code block of that section
   ```
+  In the `Verify:` line form the command must end the line (a final full stop is fine), so a
+  sentence such as "Check: `the docs` before committing" is not read as a command.
 
 With no command found, the extension does nothing except add the prompt line. It also does not
 run the check in a project that pi does not trust (`--no-approve`, or a declined trust prompt).
@@ -53,7 +57,7 @@ The check comes from the project, just like `.pi/extensions`.
   prompt after any change in the history. The smoke test checks that each request starts with the
   previous one.
 
-`/verify` runs the check by hand and shows the result.
+`/verify` runs the check by hand and shows the result (not in an untrusted project either).
 
 | environment | default | |
 |---|---|---|
