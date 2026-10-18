@@ -74,11 +74,11 @@ test("llama.cpp detection probes /props once, private hosts only", async () => {
 		return { ok: true, json: async () => (url.includes("10.0.0.2") ? { role: "router", build_info: "b3411" } : {}) };
 	};
 	const d = new LlamaCppDetector(fake);
-	assert.equal(await d.isLlamaCpp("http://10.0.0.2:18080/v1"), true);
-	assert.equal(await d.isLlamaCpp("http://10.0.0.2:18080"), true);
+	assert.equal(await d.isLlamaCpp("http://10.0.0.2:8080/v1"), true);
+	assert.equal(await d.isLlamaCpp("http://10.0.0.2:8080"), true);
 	assert.equal(await d.isLlamaCpp("http://10.0.0.3:8000/v1"), false);
 	assert.equal(await d.isLlamaCpp("https://api.openai.com/v1"), false);
-	assert.deepEqual(calls, ["http://10.0.0.2:18080/props", "http://10.0.0.3:8000/props"]);
+	assert.deepEqual(calls, ["http://10.0.0.2:8080/props", "http://10.0.0.3:8000/props"]);
 	const failing = new LlamaCppDetector(async () => {
 		throw new Error("ECONNREFUSED");
 	});

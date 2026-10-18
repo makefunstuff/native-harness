@@ -4,7 +4,7 @@ import { fakeCtx, fakePi } from "../../test/lib/fake-pi.ts";
 import { DEFAULTS, LlamaCppDetector, type GuardConfig } from "./guard.ts";
 import extension, { CUSTOM_TYPE } from "./index.ts";
 
-const LOCAL = { provider: "llama.cpp", id: "qwen", api: "openai-completions", baseUrl: "http://192.168.1.5:18080/v1", reasoning: true };
+const LOCAL = { provider: "llama.cpp", id: "qwen", api: "openai-completions", baseUrl: "http://192.168.1.5:8080/v1", reasoning: true };
 const CLOUD = { provider: "anthropic", id: "claude", api: "anthropic-messages", baseUrl: "https://api.anthropic.com", reasoning: true };
 
 function setup(config: Partial<GuardConfig> = {}, llamaCpp = false, model: any = LOCAL) {

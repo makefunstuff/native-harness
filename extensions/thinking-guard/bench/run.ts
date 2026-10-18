@@ -215,7 +215,7 @@ function sessionStats(file: string | undefined) {
 			st.tool_calls += content.filter((c) => c.type === "toolCall").length;
 			if (m.stopReason === "error") {
 				st.provider_errors++;
-				st.error = String(m.errorMessage ?? "").slice(0, 200);
+				st.error = String(m.errorMessage ?? "").slice(0, 200).replaceAll(homedir(), "~");
 			}
 		} else if (m.role === "toolResult" && m.isError) {
 			st.tool_errors++;
@@ -324,7 +324,7 @@ async function runTicket(arm: string, opts: Options, task: string, round: number
 		long_turns: thinking.filter((x) => x > LONG).length, ...rest2,
 		guard_aborts: st.guard_entries.filter((g) => g.kind === "abort").length,
 		budget_hits: st.guard_entries.filter((g) => g.kind === "budget").length,
-		...ps, hidden_tail: graded.output.slice(-300),
+		...ps, hidden_tail: graded.output.slice(-300).replaceAll(homedir(), "~"),
 	};
 }
 
