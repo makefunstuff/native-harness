@@ -3,7 +3,7 @@
 import glob, json, os, statistics
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RESULTS = os.path.join(HERE, "results")
+RESULTS = os.environ.get("LOCAL_EDIT_RESULTS", os.path.join(HERE, "results"))  # results/ (or elsewhere while a run is going)
 EDIT_TICKETS = {"edit-handlers", "edit-tabs", "edit-table"}
 
 

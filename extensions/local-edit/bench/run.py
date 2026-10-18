@@ -29,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EXT = os.path.dirname(HERE)
 REPO = os.path.dirname(os.path.dirname(EXT))
 TASK_DIRS = [os.path.join(REPO, "experimental", "llama-native", "bench", "tasks"), os.path.join(HERE, "tasks")]
-RESULTS = os.path.join(HERE, "results")
+RESULTS = os.environ.get("LOCAL_EDIT_RESULTS", os.path.join(HERE, "results"))  # results/ (or elsewhere while a run is going)
 CACHE = os.path.expanduser(os.environ.get("LOCAL_EDIT_BENCH_CACHE", "~/.cache/pi-extras/local-edit"))
 PREAMBLE = ("You are working autonomously in this repository; nobody will answer questions. "
             "Read the code, make the change, run the tests, and stop when the work is done.\n\n")
