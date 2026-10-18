@@ -150,15 +150,135 @@ export function bestSubstring(text: string, pattern: string): { start: number; e
 	return { start: prevStart[best], end: best, ratio: m ? 1 - prev[best] / m : 0 };
 }
 
+/** Where a and b differ, after their common prefix and suffix: a[p, ea) vs b[p, eb). */
+function diffSpan(a: string, b: string): { p: number; ea: number; eb: number } | undefined {
+	if (a === b) return undefined;
+	let p = 0;
+	while (p < a.length && p < b.length && a[p] === b[p]) p++;
+	let s = 0;
+	while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+	return { p, ea: a.length - s, eb: b.length - s };
+}
+
+/**
+ * Three-way merge of one line: o = the model's oldText, f = the file, n = the model's newText.
+ * Where o misremembers the file in a spot the model does not change, the file's text is kept;
+ * where the model rewrites that spot, its newText wins; anything else is a conflict (undefined).
+ */
+export function merge3(o: string, f: string, n: string): string | undefined {
+	const d1 = diffSpan(o, f);
+	if (!d1) return n;
+	const d2 = diffSpan(o, n);
+	if (!d2) return f; // the model keeps this text: keep the file's version of it
+	if (d1.ea < d2.p) return f.slice(0, d1.eb) + o.slice(d1.ea, d2.p) + n.slice(d2.p, d2.eb) + o.slice(d2.ea);
+	if (d2.ea < d1.p) return n.slice(0, d2.eb) + o.slice(d2.ea, d1.p) + f.slice(d1.p, d1.eb) + o.slice(d1.ea);
+	// the model rewrites the misremembered text (an insertion in the file must fall strictly inside)
+	const inside = d1.p === d1.ea ? d2.p < d1.p && d1.p < d2.ea : d2.p <= d1.p && d1.ea <= d2.ea;
+	if (inside && d2.ea > d2.p) return n;
+	// newText already has the file's text at that spot (the model fixed its own typo)
+	if (n.startsWith(f.slice(0, d1.eb))) return n;
+	return undefined;
+}
+
+/** Longest common subsequence of two line lists under `eq`: matched index pairs, in order. */
+function lcs(a: string[], b: string[], eq: (x: string, y: string) => boolean): Array<[number, number]> {
+	const m = a.length;
+	const n = b.length;
+	const t: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+	for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) t[i][j] = eq(a[i], b[j]) ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+	const out: Array<[number, number]> = [];
+	for (let i = 0, j = 0; i < m && j < n; ) {
+		if (eq(a[i], b[j])) out.push([i++, j++]);
+		else if (t[i + 1][j] >= t[i][j + 1]) i++;
+		else j++;
+	}
+	return out;
+}
+
+const body = (l: string) => l.slice(indentOf(l).length);
+
+/**
+ * For a loose whole-line match: carry the file's real text into newText wherever oldText
+ * misremembered a line the model does not change, so a near match never writes stale values back.
+ * Returns the merged newText (in the model's indentation) and the file lines kept, or a conflict.
+ */
+function mergeStale(oldLines: string[], win: string[], winStart: number, newText: string): { newText: string; kept: number[] } | { conflict: string } {
+	// pair oldText lines with file lines: equal lines first, then the rest of each gap by position
+	const anchors = lcs(oldLines, win, (x, y) => norm(x) === norm(y));
+	const pairs: Array<[number, number]> = [];
+	let pi = 0;
+	let pj = 0;
+	for (const [ai, aj] of [...anchors, [oldLines.length, win.length] as [number, number]]) {
+		const go = oldLines.slice(pi, ai).map((_, k) => pi + k).filter((i) => oldLines[i].trim());
+		const gf = win.slice(pj, aj).map((_, k) => pj + k).filter((j) => win[j].trim());
+		if (go.length !== gf.length) {
+			const extra = go.length > gf.length ? `oldText has a line the file does not have there ("${oldLines[go[gf.length]].trim()}")` : `the file has line ${winStart + gf[go.length] + 1} ("${win[gf[go.length]].trim()}") that oldText leaves out`;
+			return { conflict: extra };
+		}
+		go.forEach((i, k) => pairs.push([i, gf[k]]));
+		if (ai < oldLines.length) pairs.push([ai, aj]);
+		pi = ai + 1;
+		pj = aj + 1;
+	}
+	const newLines = newText.split("\n");
+	const kept: number[] = [];
+	const unchanged = new Map(lcs(oldLines, newLines, (x, y) => x === y).map(([i, k]) => [i, k]));
+	for (const [i, j] of pairs) {
+		const o = oldLines[i];
+		const f = win[j];
+		if (norm(o) === norm(f)) continue; // indentation only: reindent() handles it
+		const k = unchanged.get(i);
+		if (k !== undefined) {
+			newLines[k] = indentOf(o) + body(f);
+			kept.push(winStart + j + 1);
+			continue;
+		}
+		// the model changed this line: merge within it, between its unchanged neighbours
+		let lo = 0;
+		let hi = newLines.length;
+		for (const [oi, nk] of unchanged) {
+			if (oi < i) lo = Math.max(lo, nk + 1);
+			if (oi > i) hi = Math.min(hi, nk);
+		}
+		let bestK = -1;
+		let bestSim = 0.5;
+		for (let c = lo; c < hi; c++) {
+			const sim = similarity(norm(newLines[c]), norm(o));
+			if (sim > bestSim) [bestK, bestSim] = [c, sim];
+		}
+		if (bestK === -1) continue; // the model removes this line anyway
+		const m = merge3(body(o), body(f), body(newLines[bestK]));
+		if (m === undefined)
+			return { conflict: `oldText says "${o.trim()}" but line ${winStart + j + 1} of the file is "${f.trim()}", and the edit changes that same text` };
+		if (m !== body(newLines[bestK])) kept.push(winStart + j + 1);
+		newLines[bestK] = indentOf(newLines[bestK]) + m;
+	}
+	return { newText: newLines.join("\n"), kept };
+}
+
 interface Window {
 	start: number; // 0-based first line
 	size: number; // number of lines
 	score: number;
 }
 
-/** Re-indent newText from the model's indentation to the file's. */
+/** Re-indent newText from the model's indentation to the file's (tabs and spaces converted). */
 export function reindent(newText: string, modelIndent: string, fileIndent: string): string {
 	if (modelIndent === fileIndent) return newText;
+	const tabs = (s: string) => /^\t+$/.test(s);
+	const spaces = (s: string) => /^ +$/.test(s);
+	if ((tabs(modelIndent) || !modelIndent) && spaces(fileIndent) && /^\t/m.test(newText)) {
+		// tabs in the model's text, spaces in the file: one tab = the file's width per level
+		const width = modelIndent && fileIndent.length % modelIndent.length === 0 ? fileIndent.length / modelIndent.length : 4;
+		const conv = (t: string) => t.replace(/^\t+/gm, (m) => " ".repeat(m.length * width));
+		return reindent(conv(newText), conv(modelIndent), fileIndent);
+	}
+	if (spaces(modelIndent) && tabs(fileIndent)) {
+		// spaces in the model's text, tabs in the file
+		const width = modelIndent.length % fileIndent.length === 0 ? modelIndent.length / fileIndent.length : 4;
+		const conv = (t: string) => t.replace(/^ +/gm, (m) => "\t".repeat(Math.floor(m.length / width)) + " ".repeat(m.length % width));
+		return reindent(conv(newText), conv(modelIndent), fileIndent);
+	}
 	return newText
 		.split("\n")
 		.map((line) => {
@@ -220,7 +340,7 @@ function scoreWindows(fileLines: string[], oldLines: string[], floor: number, ke
 
 const overlaps = (a: Window, b: Window) => a.start < b.start + b.size && b.start < a.start + a.size;
 
-type Found = { from: number; to: number; newText: string; how: string; lines: string } | { ambiguous: number[] } | undefined;
+type Found = { from: number; to: number; newText: string; how: string; lines: string } | { ambiguous: number[] } | { conflict: string } | undefined;
 
 /** Steps 3 and 4 for one oldText. Offsets are into `content`. */
 function tolerantFind(content: string, fileLines: string[], lineStart: number[], edit: Edit): Found {
@@ -231,10 +351,13 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 		const from = lineStart[start];
 		let to = lineStart[start + size - 1] + fileLines[start + size - 1].length;
 		if (trailingNewline && to < content.length) to += 1;
+		const merged = mergeStale(oldLines, fileLines.slice(start, start + size), start, edit.newText);
+		if ("conflict" in merged) return merged;
 		const fi = firstNonBlank(fileLines.slice(start, start + size));
 		const oi = firstNonBlank(oldLines);
-		const newText = reindent(edit.newText, indentOf(oldLines[oi]), indentOf(fileLines[start + fi] ?? ""));
-		return { from, to, newText, how, lines: size === 1 ? `line ${start + 1}` : `lines ${start + 1}-${start + size}` };
+		const newText = reindent(merged.newText, indentOf(oldLines[oi]), indentOf(fileLines[start + fi] ?? ""));
+		const kept = merged.kept.length ? `; kept the file's text where oldText differed, at line ${merged.kept.join(", ")}` : "";
+		return { from, to, newText, how: how + kept, lines: size === 1 ? `line ${start + 1}` : `lines ${start + 1}-${start + size}` };
 	};
 
 	// 3. indentation-tolerant, whole lines
@@ -264,11 +387,15 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 				const h = hits[0];
 				const whole = h.start <= indentOf(fileLines[h.line]).length && h.end >= fileLines[h.line].trimEnd().length;
 				if (whole) return region(h.line, 1, `${Math.round(h.ratio * 100)}% similar`);
+				const f = fileLines[h.line].slice(h.start, h.end);
+				const n2 = stripLike(edit.newText, oldLines[0]);
+				const m = merge3(pat, f, n2);
+				if (m === undefined) return { conflict: `oldText says "${pat}" but line ${h.line + 1} of the file has "${f}", and the edit changes that same text` };
 				return {
 					from: lineStart[h.line] + h.start,
 					to: lineStart[h.line] + h.end,
-					newText: stripLike(edit.newText, oldLines[0]),
-					how: `${Math.round(h.ratio * 100)}% similar`,
+					newText: m,
+					how: `${Math.round(h.ratio * 100)}% similar` + (m !== n2 ? `; kept the file's text where oldText differed, at line ${h.line + 1}` : ""),
 					lines: `line ${h.line + 1}`,
 				};
 			}
@@ -384,20 +511,22 @@ export function resolveEdits(content: string, edits: Edit[], path: string): Reso
 			);
 		// 2. literal escapes
 		const unesc = unescapeLiteral(e.oldText);
-		if (unesc !== undefined) {
-			const u = piMatches(content, unesc);
-			if (u.count === 1) {
-				out.push({ oldText: unesc, newText: unescapeLiteral(e.newText) ?? e.newText });
-				notes.push(`${label}: decoded literal \\n escapes`);
-				return;
-			}
-			if (u.count === 0) {
-				e.oldText = unesc;
-				e.newText = unescapeLiteral(e.newText) ?? e.newText;
-			}
+		const decoded = unesc === undefined ? undefined : { oldText: unesc, newText: unescapeLiteral(e.newText) ?? e.newText };
+		if (decoded && piMatches(content, decoded.oldText).count === 1) {
+			out.push(decoded);
+			notes.push(`${label}: decoded literal \\n escapes`);
+			return;
 		}
-		// 3./4. tolerant
-		const found = tolerantFind(content, fileLines, lineStart, e);
+		// 3./4. tolerant: as written first (a "\n" may be part of a string literal), then decoded
+		let found = tolerantFind(content, fileLines, lineStart, e);
+		if (!found && decoded && piMatches(content, decoded.oldText).count === 0) {
+			found = tolerantFind(content, fileLines, lineStart, decoded);
+			if (found) Object.assign(e, decoded);
+		}
+		if (found && "conflict" in found)
+			throw new EditMatchError(
+				`${label} was not placed in ${path}: ${found.conflict}. oldText must show the file as it is now; re-read those lines and send the edit again.\n${closestCandidates(content, e.oldText)}`,
+			);
 		if (found && "ambiguous" in found)
 			throw new EditMatchError(
 				`${label} was not found exactly in ${path}, and similar text appears in several places (lines ${found.ambiguous.join(", ")}). ` +

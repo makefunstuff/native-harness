@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { fakeCtx, fakePi } from "../../test/lib/fake-pi.ts";
 import { compactDiff } from "./diff.ts";
 import extension, { repairArguments } from "./index.ts";
-import { EditMatchError, bestSubstring, reindent, resolveEdits, similarity, unescapeLiteral } from "./match.ts";
+import { EditMatchError, bestSubstring, merge3, reindent, resolveEdits, similarity, unescapeLiteral } from "./match.ts";
 import { resolveEditPath, strippedVariants } from "./paths.ts";
 
 const PY = `import os
@@ -66,7 +66,9 @@ test("indentation-tolerant: oldText with the wrong indent, newText re-indented",
 });
 
 test("tabs instead of spaces are re-indented to the file's spaces", () => {
-	assert.equal(reindent("\tfoo\n\t\tbar", "\t", "    "), "    foo\n    \tbar");
+	assert.equal(reindent("\tfoo\n\t\tbar", "\t", "    "), "    foo\n        bar");
+	assert.equal(reindent("\tif x:\n\t\tprint(x)", "\t", "        "), "        if x:\n                print(x)");
+	assert.equal(reindent("    foo\n        bar", "    ", "\t"), "\tfoo\n\t\tbar");
 	assert.equal(reindent("foo\n    bar", "", "    "), "    foo\n        bar");
 });
 
@@ -240,4 +242,47 @@ test("a miss meant for another file names that file", async () => {
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+});
+
+test("a near match never writes the model's stale value back", () => {
+	const src = "CONFIG = {\n    'timeout_seconds': 300,\n    'retries_allowed': 5,\n    'backoff': 'exponential',\n}\n";
+	const old = "CONFIG = {\n    'timeout_seconds': 30,\n    'retries_allowed': 5,\n    'backoff': 'exponential',";
+	const r = resolveEdits(src, [{ oldText: old, newText: old.replace("5,", "7,") }], "c.py");
+	const after = src.replace(r.edits[0].oldText, r.edits[0].newText);
+	assert.match(after, /'timeout_seconds': 300,/);
+	assert.match(after, /'retries_allowed': 7,/);
+	assert.match(r.notes[0], /kept the file's text where oldText differed, at line 2/);
+});
+
+test("a stale value inside a changed line is kept when the change is elsewhere in the line", () => {
+	const src = "def f():\n    return call(timeout=300, retries=5, mode='fast', verbose=False)\n";
+	const r = resolveEdits(src, [{ oldText: "    return call(timeout=30, retries=5, mode='fast', verbose=False)", newText: "    return call(timeout=30, retries=7, mode='fast', verbose=False)" }], "f.py");
+	assert.equal(src.replace(r.edits[0].oldText, r.edits[0].newText), "def f():\n    return call(timeout=300, retries=7, mode='fast', verbose=False)\n");
+});
+
+test("a near match is refused when the edit changes the misremembered text itself", () => {
+	const src = "a = 1\nlimit_value = compute_limit(300, 'x')\nb = 2\nc = 3\n";
+	assert.throws(
+		() => resolveEdits(src, [{ oldText: "a = 1\nlimit_value = compute_limit(30, 'x')\nb = 2\nc = 3", newText: "a = 1\nlimit_value = compute_limit(31, 'x')\nb = 2\nc = 3" }], "f.py"),
+		/not placed in f\.py: oldText says "limit_value = compute_limit\(30, 'x'\)" but line 2 of the file is "limit_value = compute_limit\(300, 'x'\)"/,
+	);
+});
+
+test("a line the model forgot is not silently deleted", () => {
+	const lines = Array.from({ length: 30 }, (_, i) => `    value_${i} = compute_value(${i})`);
+	const old = [...lines.slice(5, 12), ...lines.slice(13, 25)].join("\n");
+	assert.throws(() => resolveEdits(lines.join("\n"), [{ oldText: old, newText: old.replace("(6)", "(60)") }], "f.py"), /not placed in f\.py: (the file has line 13 .* that oldText leaves out|oldText has a line the file does not have there)/);
+});
+
+test("merge3", () => {
+	assert.equal(merge3("timeout=30 retries=5", "timeout=300 retries=5", "timeout=30 retries=7"), "timeout=300 retries=7");
+	assert.equal(merge3("x = totl", "x = total", "y = totl"), "y = total");
+	assert.equal(merge3("abc defalt", "abc default", "abc"), "abc");
+	assert.equal(merge3("v = 30", "v = 300", "v = 31"), undefined);
+});
+
+test("a one-line oldText with a literal \\n in a string is matched as written", () => {
+	const src = 'def report(total_amount):\n    print("Grand total:\\n", total_amount)\n';
+	const r = resolveEdits(src, [{ oldText: '    print("Grand totl:\\n", total_amount)', newText: '    print("Grand total:\\n", round(total_amount, 2))' }], "r.py");
+	assert.equal(src.replace(r.edits[0].oldText, r.edits[0].newText), 'def report(total_amount):\n    print("Grand total:\\n", round(total_amount, 2))\n');
 });

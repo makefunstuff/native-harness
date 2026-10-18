@@ -87,6 +87,11 @@ export default function (pi: ExtensionAPI) {
 			if (p.error) throw new Error(p.error);
 			if (p.note) notes.push(p.note);
 			let edits: Edit[] = input?.edits;
+			if (Array.isArray(edits))
+				edits.forEach((e, i) => {
+					for (const k of ["oldText", "newText"] as const)
+						if (typeof e?.[k] !== "string") throw new Error(`edits[${i}].${k} is missing: every edit needs both oldText and newText (use "" as newText to delete).`);
+				});
 			let content: string | undefined;
 			if (Array.isArray(edits) && edits.length) {
 				const abs = isAbsolute(p.path) ? p.path : resolve(cwd, p.path.replace(/^@/, ""));
