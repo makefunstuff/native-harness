@@ -1,0 +1,100 @@
+ 3 files changed, 85 insertions(+)
+diff --git c/__pycache__/presets.cpython-314.pyc i/__pycache__/presets.cpython-314.pyc
+new file mode 100644
+index 0000000..24c3d66
+Binary files /dev/null and i/__pycache__/presets.cpython-314.pyc differ
+diff --git c/presets.py i/presets.py
+new file mode 100644
+index 0000000..5312b49
+--- /dev/null
++++ i/presets.py
+@@ -0,0 +1,85 @@
++"""Reader for llama.cpp router preset files (a small hand-rolled INI dialect).
++
++Format:
++- ``key = value`` lines (split on the first ``=``, whitespace stripped);
++  the value may itself contain ``=``.
++- Lines whose first non-space character is ``#`` or ``;`` are comments;
++  blank lines are ignored.
++- Keys before the first ``[section]`` are global defaults inherited by
++  every section; a section's own key overrides the default.
++- A duplicate section name, or a non-blank, non-comment line that is
++  neither a section header nor contains ``=``, raises ``ValueError``
++  mentioning the 1-based line number.
++"""
++
++import sys
++
++
++def load_presets(path):
++    """Parse *path* and return {preset name: merged keys} in file order.
++
++    All values are strings. Each preset's dict contains the global
++    defaults overridden by the preset's own keys.
++    """
++    with open(path, "r", encoding="utf-8") as f:
++        lines = f.readlines()
++
++    presets = {}
++    order = []
++    defaults = {}
++    current = None
++
++    for lineno, raw in enumerate(lines, 1):
++        line = raw.strip()
++        if not line or line[0] in "#;":
++            continue
++        if line.startswith("["):
++            if not line.endswith("]"):
++                raise ValueError(
++                    f"line {lineno}: malformed section header: {line!r}")
++            name = line[1:-1].strip()
++            if not name:
++                raise ValueError(f"line {lineno}: empty section name")
++            if name in presets:
++                raise ValueError(
++                    f"line {lineno}: duplicate section {name!r}")
++            current = dict(defaults)
++            presets[name] = current
++            order.append(name)
++            continue
++        if "=" not in line:
++            raise ValueError(
++                f"line {lineno}: expected '[section]' or 'key = value': "
++                f"{line!r}")
++        key, _, value = line.partition("=")
++        key = key.strip()
++        if not key:
++            raise ValueError(f"line {lineno}: empty key: {line!r}")
++        value = value.strip()
++        if current is None:
++            defaults[key] = value
++        else:
++            current[key] = value
++
++    return {name: presets[name] for name in order}
++
++
++def main(argv):
++    """Print a one-line report per preset. Returns 0 on success."""
++    if len(argv) != 2:
++        print(f"usage: {argv[0]} FILE", file=sys.stderr)
++        return 2
++    presets = load_presets(argv[1])
++    for name, kv in presets.items():
++        print(
++            f"{name} "
++            f"ctx={kv.get('ctx-size', '-')} "
++            f"devices={kv.get('device', '-')} "
++            f"split={kv.get('split-mode', 'layer')} "
++            f"draft={'yes' if 'spec-draft-model' in kv else 'no'}"
++        )
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main(sys.argv))
+diff --git c/tests/__pycache__/test_presets.cpython-314.pyc i/tests/__pycache__/test_presets.cpython-314.pyc
+new file mode 100644
+index 0000000..5addbed
+Binary files /dev/null and i/tests/__pycache__/test_presets.cpython-314.pyc differ

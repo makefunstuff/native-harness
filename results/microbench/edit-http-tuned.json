@@ -1,0 +1,1 @@
+{"mode":"http-tuned","url":"loopback","warm":{"ms":21989.041068,"prompt_total":23355,"processed":23355,"reused":0},"edited":{"ms":19094.702231000003,"prompt_total":20550,"processed":20086,"reused":464},"append":{"ms":804.9091829999961,"prompt_total":21097,"processed":551,"reused":20546},"edited_again":{"ms":1132.0825419999965,"prompt_total":23355,"processed":4,"reused":23351}}

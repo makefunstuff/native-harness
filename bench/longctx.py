@@ -4,7 +4,7 @@ mode) with five prompts that read a lot (a ~60 KB design doc, 13 modules, then t
 re-reads), a manual /compact after prompt 4, and a short question after it.
 
 usage: bench/longctx.py ARM --provider llama.cpp|llama-native [--exp prune] [--round N]
-Writes results/raw/longctx/<ARM>-r<N>.{json,metrics.jsonl,session/}.
+Writes results/raw/longctx/<ARM>-r<N>.{json,metrics.jsonl} (the pi session goes outside the repo).
 """
 import argparse, json, os, random, shutil, subprocess, sys, threading, time
 
@@ -120,7 +120,7 @@ def main():
         os.remove(metrics)
     for base in ("proxy.jsonl", "native.jsonl"):
         open(os.path.join(RUN, base + ".target"), "w").write(metrics)
-    sess = os.path.join(RAW, name + ".session")
+    sess = os.path.join(os.path.expanduser("~/.cache/native-harness/sessions/longctx"), name + ".session")
     shutil.rmtree(sess, ignore_errors=True)
     os.makedirs(sess)
     env = dict(os.environ, LLAMA_NATIVE_METRICS=os.path.join(RUN, "native.jsonl"), LLAMA_NATIVE_EXP=a.exp)

@@ -1,0 +1,13 @@
+# "HTTP done well": llama-server options aimed at agent workloads, appended to the preset for the
+# http-tuned baseline (scripts/baseline-server.sh with EXTRA_ARGS_FILE=configs/http-tuned.args).
+# - checkpoints at every user-message boundary instead of every 8192 tokens, and more of them
+#   (pi's llama.cpp docs recommend this for hybrid models such as Qwen3.5/3.8)
+# - KV-shift prefix reuse (llama.cpp discussion #13606): has no effect on this hybrid model, whose
+#   recurrent layers cannot be shifted; kept so the log shows it was tried
+# - a larger host prompt cache (the 8 GiB default evicted long conversations, homelab notes 2026-10-12)
+# - slot save/restore available (discussion #20572); pi does not call it, see RESULTS.md
+--ctx-checkpoints 64
+--checkpoint-min-step 0
+--cache-reuse 256
+--cache-ram 16384
+--slot-save-path ${SLOT_DIR}

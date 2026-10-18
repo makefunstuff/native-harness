@@ -1,0 +1,192 @@
+ 4 files changed, 140 insertions(+), 8 deletions(-)
+diff --git c/__pycache__/todo.cpython-314.pyc i/__pycache__/todo.cpython-314.pyc
+new file mode 100644
+index 0000000..1d05970
+Binary files /dev/null and i/__pycache__/todo.cpython-314.pyc differ
+diff --git c/tests/__pycache__/test_todo.cpython-314.pyc i/tests/__pycache__/test_todo.cpython-314.pyc
+new file mode 100644
+index 0000000..f0c2065
+Binary files /dev/null and i/tests/__pycache__/test_todo.cpython-314.pyc differ
+diff --git c/tests/test_todo.py i/tests/test_todo.py
+index c672134..4f88e10 100644
+--- c/tests/test_todo.py
++++ i/tests/test_todo.py
+@@ -1,4 +1,4 @@
+-import os, tempfile, unittest
++import os, sqlite3, tempfile, unittest
+ import todo
+ 
+ 
+@@ -10,6 +10,83 @@ class TodoTest(unittest.TestCase):
+         todo.complete(conn, i)
+         self.assertTrue(todo.list_tasks(conn)[0]["done"])
+ 
++    def _version(self, path):
++        return sqlite3.connect(path).execute("SELECT version FROM schema_version").fetchone()[0]
++
++    def test_new_database_created_at_version_2(self):
++        d = tempfile.mkdtemp()
++        path = os.path.join(d, "t.db")
++        conn = todo.open_db(path)
++        self.assertEqual(self._version(path), 2)
++        self.assertEqual(conn.execute(
++            "PRAGMA table_info(tasks)").fetchall(),
++            [(0, "id", "INTEGER", 0, None, 1),
++             (1, "title", "TEXT", 1, None, 0),
++             (2, "done", "INTEGER", 1, "0", 0),
++             (3, "due_date", "TEXT", 0, None, 0)])
++
++    def test_legacy_database_migrated_in_place(self):
++        d = tempfile.mkdtemp()
++        path = os.path.join(d, "t.db")
++        old = sqlite3.connect(path)
++        old.execute("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, "
++                    "done INTEGER NOT NULL DEFAULT 0)")
++        old.executemany("INSERT INTO tasks (title, done) VALUES (?, ?)",
++                        [("old task", 0), ("done task", 1)])
++        old.commit()
++        old.close()
++
++        conn = todo.open_db(path)
++        self.assertEqual(self._version(path), 2)
++        tasks = todo.list_tasks(conn)
++        self.assertEqual([(t["title"], t["done"], t["due_date"]) for t in tasks],
++                         [("old task", False, None), ("done task", True, None)])
++
++    def test_opening_migrated_database_changes_nothing(self):
++        d = tempfile.mkdtemp()
++        path = os.path.join(d, "t.db")
++        todo.open_db(path)
++        todo.add_task(todo.open_db(path), "a", due_date="2024-01-05")
++        before = self._version(path)
++        self.assertEqual(before, 2)
++        conn = todo.open_db(path)  # reopening must be a no-op
++        self.assertEqual(self._version(path), 2)
++        self.assertEqual([t["title"] for t in todo.list_tasks(conn)], ["a"])
++
++    def test_add_task_stores_due_date(self):
++        d = tempfile.mkdtemp()
++        conn = todo.open_db(os.path.join(d, "t.db"))
++        i = todo.add_task(conn, "ship it", due_date="2024-03-01")
++        i2 = todo.add_task(conn, "no date")
++        tasks = {t["id"]: t for t in todo.list_tasks(conn)}
++        self.assertEqual(tasks[i]["due_date"], "2024-03-01")
++        self.assertIsNone(tasks[i2]["due_date"])
++
++    def test_add_task_rejects_bad_due_date_and_stores_nothing(self):
++        d = tempfile.mkdtemp()
++        conn = todo.open_db(os.path.join(d, "t.db"))
++        for bad in ["2024/03/01", "03-01-2024", "2024-13-01", "2024-02-30", "20240301", "2024-3-1", 20240301, "2024-03-01T00:00:00"]:
++            with self.assertRaises(ValueError):
++                todo.add_task(conn, "bad", due_date=bad)
++        self.assertEqual(todo.list_tasks(conn), [])
++
++    def test_overdue(self):
++        d = tempfile.mkdtemp()
++        conn = todo.open_db(os.path.join(d, "t.db"))
++        a = todo.add_task(conn, "late one", due_date="2024-01-01")
++        b = todo.add_task(conn, "late two", due_date="2024-01-02")
++        c = todo.add_task(conn, "due today", due_date="2024-01-03")
++        e = todo.add_task(conn, "future", due_date="2024-02-01")
++        f = todo.add_task(conn, "no date")
++        todo.complete(conn, a)  # done tasks never come back
++        todo.add_task(conn, "late three", due_date="2024-01-02")
++        # due date order, ties broken by id
++        self.assertEqual(todo.overdue(conn, "2024-01-03"), ["late two", "late three"])
++        # strictly before today
++        self.assertNotIn("due today", todo.overdue(conn, "2024-01-03"))
++        self.assertNotIn("future", todo.overdue(conn, "2024-01-03"))
++        self.assertNotIn("no date", todo.overdue(conn, "2024-01-03"))
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git c/todo.py i/todo.py
+index 5f8b4ca..89988cb 100644
+--- c/todo.py
++++ i/todo.py
+@@ -1,16 +1,62 @@
++import re
+ import sqlite3
++from datetime import date
++
++# Each entry migrates from version N to N+1, where N is the 1-based index.
++MIGRATIONS = [
++    # 0 -> 1: the original release schema
++    ["CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, "
++     "done INTEGER NOT NULL DEFAULT 0)"],
++    # 1 -> 2: add due_date (ISO date, nullable)
++    ["ALTER TABLE tasks ADD COLUMN due_date TEXT"],
++]
++
++SCHEMA_VERSION = len(MIGRATIONS)  # 2
++
++_DUE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
++
++
++def _current_version(conn):
++    """Version of the database: 0 (empty), 1 (has tasks but no schema_version), or stored value."""
++    has_schema_version = conn.execute(
++        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
++    ).fetchone()
++    if has_schema_version:
++        return conn.execute("SELECT version FROM schema_version").fetchone()[0]
++    has_tasks = conn.execute(
++        "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
++    ).fetchone()
++    return 1 if has_tasks else 0
+ 
+ 
+ def open_db(path):
+     conn = sqlite3.connect(path)
+-    conn.execute("CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, "
+-                 "done INTEGER NOT NULL DEFAULT 0)")
+-    conn.commit()
++    version = _current_version(conn)
++    for target in range(version + 1, SCHEMA_VERSION + 1):
++        with conn:  # one transaction per migration: rollback on failure
++            for stmt in MIGRATIONS[target - 1]:
++                conn.execute(stmt)
++            conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
++            conn.execute("DELETE FROM schema_version")
++            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (target,))
+     return conn
+ 
+ 
+-def add_task(conn, title):
+-    cur = conn.execute("INSERT INTO tasks (title) VALUES (?)", (title,))
++def _validate_due_date(due_date):
++    if due_date is None:
++        return None
++    if not isinstance(due_date, str) or not _DUE_DATE_RE.match(due_date):
++        raise ValueError("due_date must be None or a YYYY-MM-DD string, got %r" % (due_date,))
++    try:
++        date.fromisoformat(due_date)
++    except ValueError:
++        raise ValueError("due_date is not a valid YYYY-MM-DD date: %r" % (due_date,)) from None
++    return due_date
++
++
++def add_task(conn, title, due_date=None):
++    due_date = _validate_due_date(due_date)  # raises before anything is written
++    cur = conn.execute("INSERT INTO tasks (title, due_date) VALUES (?, ?)", (title, due_date))
+     conn.commit()
+     return cur.lastrowid
+ 
+@@ -21,5 +67,14 @@ def complete(conn, task_id):
+ 
+ 
+ def list_tasks(conn):
+-    rows = conn.execute("SELECT id, title, done FROM tasks ORDER BY id").fetchall()
+-    return [{"id": r[0], "title": r[1], "done": bool(r[2])} for r in rows]
++    rows = conn.execute("SELECT id, title, done, due_date FROM tasks ORDER BY id").fetchall()
++    return [{"id": r[0], "title": r[1], "done": bool(r[2]), "due_date": r[3]} for r in rows]
++
++
++def overdue(conn, today):
++    rows = conn.execute(
++        "SELECT title FROM tasks WHERE done = 0 AND due_date IS NOT NULL AND due_date < ? "
++        "ORDER BY due_date, id",
++        (today,),
++    ).fetchall()
++    return [r[0] for r in rows]

@@ -3,6 +3,7 @@
 const { readFileSync } = require("node:fs");
 const DEFAULTS = {
   MODEL_DIR: "/data/hfmodels/gguf",
+  SLOT_DIR: require("node:path").join(require("node:os").homedir(), ".cache/native-harness/slots"),
   HELPER_DIR: require("node:path").join(require("node:os").homedir(), ".cache/native-harness/models"),
 };
 function readArgs(file, env = process.env) {

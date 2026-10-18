@@ -8,7 +8,8 @@ usage: bench/run.py ARM --provider llama.cpp|llama-native [--exp prune,done-chec
 For llama.cpp the baseline server and logging proxy must be running (scripts/baseline-up.sh);
 for llama-native nothing may hold the GPUs (pi loads the model itself, once per task process).
 
-Writes results/raw/<ARM>/<task>-r<k>.{metrics.jsonl,session/,diff} and appends one row per run to
+Writes results/raw/<ARM>/<task>-r<k>.{metrics.jsonl,diff,stderr} (pi sessions go to
+~/.cache/native-harness/sessions, outside the repo) and appends one row per run to
 results/raw/<ARM>.jsonl (resumable: finished task/round pairs are skipped).
 """
 import argparse, glob, json, os, shutil, subprocess, sys, threading, time
@@ -19,13 +20,20 @@ TASKS = os.path.join(HERE, "tasks")
 RAW = os.path.join(REPO, "results", "raw")
 WORK = os.path.expanduser("~/.cache/native-harness/work")
 RUN = os.path.expanduser("~/.cache/native-harness/run")
+# pi sessions hold the full system prompt and tool output (incl. memory recalls): kept out of the repo
+SESS = os.path.expanduser("~/.cache/native-harness/sessions")
 TIMEOUT = 1800
 PREAMBLE = ("You are working autonomously in this repository; nobody will answer questions. "
             "Read the code, make the change, run the tests, and stop when the work is done.\n\n")
 
 
+TMP = os.path.expanduser("~/.cache/native-harness/tmp")  # not the shared /tmp tmpfs
+
+
 def sh(cmd, cwd, timeout=180):
-    return subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True, timeout=timeout)
+    os.makedirs(TMP, exist_ok=True)
+    return subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True, timeout=timeout,
+                          env=dict(os.environ, TMPDIR=TMP))
 
 
 class VramSampler(threading.Thread):
@@ -139,7 +147,7 @@ def run_task(arm, args, task, rnd):
     sh("git init -q && git add -A && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm init", work)
     out = os.path.join(RAW, arm)
     os.makedirs(out, exist_ok=True)
-    sess = os.path.join(out, name + ".session")
+    sess = os.path.join(SESS, arm, name + ".session")
     shutil.rmtree(sess, ignore_errors=True)
     os.makedirs(sess)
     metrics = os.path.join(out, name + ".metrics.jsonl")

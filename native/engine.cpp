@@ -8,6 +8,8 @@
 #include <cstring>
 #include <climits>
 
+float logits_entropy(const float * l, int n); // entropy.cpp
+
 static double now_ms() {
     using namespace std::chrono;
     return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
@@ -415,6 +417,10 @@ GenResult Engine::generate(GenRequest & req) {
             }
             res.tokens.push_back(t);
             res.text += p;
+            if (req.want_entropy) {
+                const float * lg = llama_get_logits_ith(ctx, (int32_t) s);
+                res.entropy.push_back(lg ? logits_entropy(lg, llama_vocab_n_tokens(voc)) : NAN);
+            }
             n_gen++;
             bool stop_now = false;
             for (auto & st : req.stops) {

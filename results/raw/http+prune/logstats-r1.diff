@@ -1,0 +1,44 @@
+ 4 files changed, 9 insertions(+), 3 deletions(-)
+diff --git c/logstats/__pycache__/__init__.cpython-314.pyc i/logstats/__pycache__/__init__.cpython-314.pyc
+new file mode 100644
+index 0000000..801533b
+Binary files /dev/null and i/logstats/__pycache__/__init__.cpython-314.pyc differ
+diff --git c/logstats/__pycache__/parser.cpython-314.pyc i/logstats/__pycache__/parser.cpython-314.pyc
+new file mode 100644
+index 0000000..487cdfa
+Binary files /dev/null and i/logstats/__pycache__/parser.cpython-314.pyc differ
+diff --git c/logstats/parser.py i/logstats/parser.py
+index d664386..52d6103 100644
+--- c/logstats/parser.py
++++ i/logstats/parser.py
+@@ -2,12 +2,15 @@
+ 
+     2026-10-01T12:00:00+03:00 GET /api/items 200 123ms
+ """
+-from datetime import datetime
++import math
++from datetime import datetime, timezone
+ 
+ 
+ def parse_line(line):
+     parts = line.split()
+-    ts = datetime.strptime(parts[0][:19], "%Y-%m-%dT%H:%M:%S")
++    if len(parts) != 5:
++        raise ValueError(f"malformed log line: {line!r}")
++    ts = datetime.strptime(parts[0], "%Y-%m-%dT%H:%M:%S%z").astimezone(timezone.utc)
+     return {
+         "time": ts,
+         "method": parts[1],
+@@ -19,4 +22,7 @@ def parse_line(line):
+ 
+ def p95_latency(lines):
+     values = sorted(parse_line(l)["latency_ms"] for l in lines)
+-    return values[int(len(values) * 0.95)]
++    if not values:
++        raise ValueError("p95_latency requires at least one sample")
++    rank = math.ceil(0.95 * len(values))  # nearest rank, 1-based
++    return values[rank - 1]
+diff --git c/tests/__pycache__/test_parser.cpython-314.pyc i/tests/__pycache__/test_parser.cpython-314.pyc
+new file mode 100644
+index 0000000..5e55ee2
+Binary files /dev/null and i/tests/__pycache__/test_parser.cpython-314.pyc differ

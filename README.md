@@ -21,6 +21,37 @@ pi install and configuration. llama.cpp is added to it as one more model provide
 loaded into pi's Node process through a Node-API binding of libllama. The results are in
 [RESULTS.md](RESULTS.md).
 
+## Verdict (2026-10-18)
+
+**It works end to end, but it is not faster or cheaper than pi over HTTP.** Details and numbers:
+[RESULTS.md](RESULTS.md). The data is thin: 83 ticket runs, 1-3 per task and arm.
+
+- **It works.** pi, unchanged and with the human's full configuration, ran its coding tickets on
+  llama.cpp loaded in its own process: 18/21 passed, against 16/21 over HTTP. There were no
+  provider errors and no malformed tool calls.
+- **Same speed, same cache reuse.** Same kernels, so decode (75.6 vs 76.5 tok/s) and prefill
+  (847 vs 830 tok/s) are the same. llama-server already reuses 92% of the prompt in pi's
+  append-only loop; the binding reuses the same 92%.
+- **Slightly slower in practice.** The binding adds ~170 ms per turn (TTFT 453 vs 281 ms on small
+  turns) for its per-message renders and checkpoints. Loading the model in each pi process costs
+  4-84 s.
+- **Experiments with a real effect:**
+  - speculative decoding: ×2.2 decode speed, but llama-server has it too;
+  - in-process context edits (micro-benchmark): replacing an old tool output re-read 14.3k
+    instead of 20.1k tokens, because the binding rewinds to the edited message. On this hybrid
+    (Gated-DeltaNet) model everything after an edit must still be recomputed, and llama-server
+    wins when the edit is undone (its prompt cache).
+- **No effect:** the tool-call grammar (0 malformed calls without it); the done-check decision
+  (the model always rated itself done, p ≥ 0.994, even on a failed ticket); entropy as an
+  uncertainty trigger (AUC 0.49 for tool errors).
+- **Not tested** (benchmark stopped): pruning inside real tickets (it never triggered), the helper
+  model, think-routing, compaction on a fork, the long-context session, an "HTTP done well"
+  ticket arm.
+- **Worth going on with?** Not as the default way to run local models. One lever is still open:
+  compaction on a fork of the cache instead of a cold re-read of the transcript. Measure it with
+  `bench/longctx.py` (about an hour). If it pays, put per-message checkpoints and slot forks into
+  llama-server rather than a binding; otherwise keep `llama-native` as an optional extra and stop.
+
 ## How it fits together
 
 ```
@@ -107,7 +138,7 @@ remove it, delete the symlink.
 
 Environment (all optional): `LLAMA_NATIVE_ARGS` (argument file), `LLAMA_NATIVE_ADDON`,
 `LLAMA_NATIVE_MODEL` (which `llama.cpp` model entry to mirror), `LLAMA_NATIVE_EXP` (experiments),
-`LLAMA_NATIVE_HELPER_ARGS` (second model), `LLAMA_NATIVE_MAX_CKPT` (checkpoints kept, default 32;
+`LLAMA_NATIVE_HELPER_ARGS` (second model), `LLAMA_NATIVE_MAX_CKPT` (checkpoints kept, default 16;
 each is ~150 MB of RAM for this model), `LLAMA_NATIVE_METRICS` (JSONL per request),
 `MODEL_DIR` / `HELPER_DIR` (used in the argument files).
 
@@ -133,8 +164,9 @@ so the policy experiments run on the HTTP provider too (same policy, two transpo
 ```bash
 scripts/make-pi-agent-copy.sh     # copy of ~/.pi/agent (no sessions) in ~/.cache/native-harness/pi-agent:
                                   # llama.cpp points at our own server, llama-native is linked in
-bench/matrix.sh 3                 # baseline + in-process arms, 3 rounds of the main arms
-bench/matrix2.sh                  # think-route arms and the long-context session
+bench/matrix.sh 3                 # baseline + in-process arms, 3 rounds of the main arms (stopped at native+no-spec)
+bench/matrix2.sh                  # think-route, helper, long-context session, HTTP-tuned (not run)
+node bench/edit-microbench.mjs native   # context-edit cost, also: http <url>
 python3 bench/report.py           # -> results/summary.md
 ```
 
@@ -155,8 +187,9 @@ python3 bench/report.py           # -> results/summary.md
   never the shared router; `bench/watchdog.sh` stops everything if the router gets a request.
   `scripts/gpu-check.sh` refuses to start a model unless both GPUs are free.
 
-Raw results are in `results/raw/` (one JSONL row per run, plus the pi session, the diff and the
-per-request metrics of every run).
+Raw results are in `results/raw/` and `results/microbench/` (one JSONL row per run, plus the diff and the per-request
+metrics of every run). The pi sessions stay in `~/.cache/native-harness/sessions`: they contain the full system prompt
+and tool output, including memory recalls, so they are not published.
 
 ## Layout
 

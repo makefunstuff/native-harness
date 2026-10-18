@@ -1,0 +1,68 @@
+ 3 files changed, 53 insertions(+)
+diff --git c/__pycache__/presets.cpython-314.pyc i/__pycache__/presets.cpython-314.pyc
+new file mode 100644
+index 0000000..a1039fd
+Binary files /dev/null and i/__pycache__/presets.cpython-314.pyc differ
+diff --git c/presets.py i/presets.py
+new file mode 100644
+index 0000000..edd5873
+--- /dev/null
++++ i/presets.py
+@@ -0,0 +1,53 @@
++"""Reader for llama.cpp router preset files (see sample.ini).
++
++Hand-rolled parser: no configparser, so keys keep their dashes and
++duplicate-section errors are reported with line numbers.
++"""
++
++import sys
++
++
++def load_presets(path):
++    """Parse a preset file into {preset name: merged keys}, in file order."""
++    presets = {}
++    defaults = {}
++    current = defaults
++
++    with open(path, "r", encoding="utf-8") as f:
++        for lineno, raw in enumerate(f, start=1):
++            line = raw.strip()
++            if not line or line[0] in "#;":
++                continue
++
++            if line.startswith("[") and line.endswith("]"):
++                name = line[1:-1].strip()
++                if name in presets:
++                    raise ValueError(f"duplicate section {name!r} at line {lineno}")
++                current = {}
++                presets[name] = current
++            elif "=" in line:
++                key, _, value = line.partition("=")
++                current[key.strip()] = value.strip()
++            else:
++                raise ValueError(f"malformed line {lineno}: {line!r}")
++
++    merged = {}
++    for name, keys in presets.items():
++        merged[name] = {**defaults, **keys}
++    return merged
++
++
++def main(argv):
++    path = argv[1] if len(argv) > 1 else "sample.ini"
++    presets = load_presets(path)
++    for name, keys in presets.items():
++        ctx = keys.get("ctx-size", "-")
++        devices = keys.get("device", "-")
++        split = keys.get("split-mode", "layer")
++        draft = "yes" if "spec-draft-model" in keys else "no"
++        print(f"{name} ctx={ctx} devices={devices} split={split} draft={draft}")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))
+diff --git c/tests/__pycache__/test_presets.cpython-314.pyc i/tests/__pycache__/test_presets.cpython-314.pyc
+new file mode 100644
+index 0000000..0ee21ab
+Binary files /dev/null and i/tests/__pycache__/test_presets.cpython-314.pyc differ

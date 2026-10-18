@@ -1,0 +1,191 @@
+ 5 files changed, 166 insertions(+)
+diff --git c/__pycache__/presets.cpython-314.pyc i/__pycache__/presets.cpython-314.pyc
+new file mode 100644
+index 0000000..40481ad
+Binary files /dev/null and i/__pycache__/presets.cpython-314.pyc differ
+diff --git c/presets.py i/presets.py
+new file mode 100644
+index 0000000..1c9d998
+--- /dev/null
++++ i/presets.py
+@@ -0,0 +1,89 @@
++"""Reader for llama.cpp router preset files (a hand-rolled INI subset).
++
++Deliberately not configparser: keys may contain characters configparser
++mangles, values may contain ``=``, and duplicate handling is explicit.
++
++File format:
++  - ``key = value`` lines; surrounding whitespace is stripped; the value may
++    itself contain ``=`` (split on the first ``=`` only).
++  - Lines whose first non-space character is ``#`` or ``;`` are comments;
++    blank lines are ignored.
++  - Keys before the first ``[section]`` are global defaults, inherited by
++    every section; a section's own key overrides the default.
++  - A duplicate section name, or a non-blank, non-comment line that is
++    neither a section header nor contains ``=``, raises ``ValueError``
++    mentioning the 1-based line number.
++"""
++
++from __future__ import annotations
++
++import sys
++from typing import Dict
++
++
++def _parse(text: str) -> Dict[str, Dict[str, str]]:
++    defaults: Dict[str, str] = {}
++    presets: Dict[str, Dict[str, str]] = {}
++    current: Dict[str, str] | None = None
++
++    for lineno, raw in enumerate(text.splitlines(), 1):
++        line = raw.strip()
++        if not line:
++            continue
++        if line[0] in "#;":
++            continue
++
++        if len(line) > 1 and line[0] == "[" and line[-1] == "]":
++            name = line[1:-1].strip()
++            if name in presets:
++                raise ValueError(
++                    f"line {lineno}: duplicate section [{name}]"
++                )
++            merged = dict(defaults)
++            presets[name] = merged
++            current = merged
++            continue
++
++        if "=" in line:
++            key, value = line.split("=", 1)
++            key = key.strip()
++            value = value.strip()
++            if current is None:
++                defaults[key] = value
++            else:
++                current[key] = value
++            continue
++
++        raise ValueError(
++            f"line {lineno}: not a section header or key = value pair: {line!r}"
++        )
++
++    return presets
++
++
++def load_presets(path: str) -> Dict[str, Dict[str, str]]:
++    """Parse ``path`` and return preset name -> merged keys, in file order."""
++    with open(path, "r", encoding="utf-8") as f:
++        return _parse(f.read())
++
++
++def _report_line(name: str, keys: Dict[str, str]) -> str:
++    ctx = keys.get("ctx-size", "-")
++    devices = keys.get("device", "-")
++    split = keys.get("split-mode", "layer")
++    draft = "yes" if "spec-draft-model" in keys else "no"
++    return f"{name} ctx={ctx} devices={devices} split={split} draft={draft}"
++
++
++def main(argv: list[str]) -> int:
++    if len(argv) < 2:
++        print(f"usage: {argv[0] if argv else 'presets.py'} FILE", file=sys.stderr)
++        return 2
++    presets = load_presets(argv[1])
++    for name, keys in presets.items():
++        print(_report_line(name, keys))
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))
+diff --git c/tests/__pycache__/test_presets.cpython-314.pyc i/tests/__pycache__/test_presets.cpython-314.pyc
+new file mode 100644
+index 0000000..1a29cbb
+Binary files /dev/null and i/tests/__pycache__/test_presets.cpython-314.pyc differ
+diff --git c/tests/__pycache__/test_presets_extra.cpython-314.pyc i/tests/__pycache__/test_presets_extra.cpython-314.pyc
+new file mode 100644
+index 0000000..77cb93e
+Binary files /dev/null and i/tests/__pycache__/test_presets_extra.cpython-314.pyc differ
+diff --git c/tests/test_presets_extra.py i/tests/test_presets_extra.py
+new file mode 100644
+index 0000000..320bd54
+--- /dev/null
++++ i/tests/test_presets_extra.py
+@@ -0,0 +1,77 @@
++import os
++import tempfile
++import unittest
++
++import presets
++
++
++HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++
++
++class ParserTest(unittest.TestCase):
++    def parse(self, text):
++        with tempfile.NamedTemporaryFile(
++            "w", suffix=".ini", delete=False
++        ) as f:
++            f.write(text)
++            path = f.name
++        try:
++            return presets.load_presets(path)
++        finally:
++            os.unlink(path)
++
++    def test_value_contains_equals(self):
++        p = self.parse("[a]\nurl = http://x/?a=1&b=2\n")
++        self.assertEqual(p["a"]["url"], "http://x/?a=1&b=2")
++
++    def test_key_with_underscore_and_dots(self):
++        p = self.parse("[a]\nspec-draft-model = d.gguf\nctx-size = 4096\n")
++        self.assertEqual(p["a"]["spec-draft-model"], "d.gguf")
++        self.assertEqual(p["a"]["ctx-size"], "4096")
++
++    def test_global_defaults_inherited_and_overridden(self):
++        p = self.parse(
++            "temp = 1.0\n[a]\nctx-size = 1\n[b]\ntemp = 0.0\n"
++        )
++        self.assertEqual(p["a"]["temp"], "1.0")
++        self.assertEqual(p["b"]["temp"], "0.0")
++        self.assertNotIn("ctx-size", p["b"])
++
++    def test_duplicate_section_raises_with_line_number(self):
++        with self.assertRaises(ValueError) as cm:
++            self.parse("[a]\n[a]\n")
++        self.assertIn("2", str(cm.exception))
++
++    def test_malformed_line_raises_with_line_number(self):
++        with self.assertRaises(ValueError) as cm:
++            self.parse("[a]\ngarbage line\n")
++        self.assertIn("2", str(cm.exception))
++
++    def test_empty_value(self):
++        p = self.parse("[a]\nkey =\n")
++        self.assertEqual(p["a"]["key"], "")
++
++    def test_no_sections(self):
++        self.assertEqual(self.parse("temp = 1.0\n"), {})
++
++
++class MainTest(unittest.TestCase):
++    def test_sample_report(self):
++        import io
++        import contextlib
++
++        buf = io.StringIO()
++        with contextlib.redirect_stdout(buf):
++            rc = presets.main(["presets.py", os.path.join(HERE, "sample.ini")])
++        self.assertEqual(rc, 0)
++        self.assertEqual(
++            buf.getvalue().splitlines(),
++            [
++                "qwen3.8-27b ctx=131072 devices=CUDA0,CUDA1 split=tensor draft=yes",
++                "zeta-2.1-q4 ctx=16384 devices=CUDA0 split=layer draft=no",
++            ],
++        )
++
++
++if __name__ == "__main__":
++    unittest.main()

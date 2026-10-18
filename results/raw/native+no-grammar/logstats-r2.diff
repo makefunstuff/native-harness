@@ -1,0 +1,50 @@
+ 4 files changed, 14 insertions(+), 3 deletions(-)
+diff --git c/logstats/__pycache__/__init__.cpython-314.pyc i/logstats/__pycache__/__init__.cpython-314.pyc
+new file mode 100644
+index 0000000..53c1c0b
+Binary files /dev/null and i/logstats/__pycache__/__init__.cpython-314.pyc differ
+diff --git c/logstats/__pycache__/parser.cpython-314.pyc i/logstats/__pycache__/parser.cpython-314.pyc
+new file mode 100644
+index 0000000..8a819ac
+Binary files /dev/null and i/logstats/__pycache__/parser.cpython-314.pyc differ
+diff --git c/logstats/parser.py i/logstats/parser.py
+index d664386..3858b10 100644
+--- c/logstats/parser.py
++++ i/logstats/parser.py
+@@ -2,12 +2,20 @@
+ 
+     2026-10-01T12:00:00+03:00 GET /api/items 200 123ms
+ """
+-from datetime import datetime
++import math
++from datetime import datetime, timezone
+ 
+ 
+ def parse_line(line):
+     parts = line.split()
+-    ts = datetime.strptime(parts[0][:19], "%Y-%m-%dT%H:%M:%S")
++    if len(parts) < 5:
++        raise ValueError(f"malformed log line: {line!r}")
++
++    ts_raw = parts[0]
++    if ts_raw.endswith("Z"):
++        ts_raw = ts_raw[:-1] + "+00:00"
++    ts = datetime.fromisoformat(ts_raw).astimezone(timezone.utc)
++
+     return {
+         "time": ts,
+         "method": parts[1],
+@@ -18,5 +26,8 @@ def parse_line(line):
+ 
+ 
+ def p95_latency(lines):
++    if not lines:
++        raise ValueError("empty input")
+     values = sorted(parse_line(l)["latency_ms"] for l in lines)
+-    return values[int(len(values) * 0.95)]
++    rank = math.ceil(0.95 * len(values))  # 1-based nearest-rank
++    return values[rank - 1]
+diff --git c/tests/__pycache__/test_parser.cpython-314.pyc i/tests/__pycache__/test_parser.cpython-314.pyc
+new file mode 100644
+index 0000000..24e43e0
+Binary files /dev/null and i/tests/__pycache__/test_parser.cpython-314.pyc differ

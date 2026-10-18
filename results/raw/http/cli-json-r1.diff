@@ -1,0 +1,77 @@
+ 4 files changed, 34 insertions(+), 4 deletions(-)
+diff --git c/README.md i/README.md
+index 7adcc7a..899f820 100644
+--- c/README.md
++++ i/README.md
+@@ -4,4 +4,11 @@ Report stock levels from a CSV file with columns `name,qty,price`.
+ 
+ ## Usage
+ 
+-    python3 inventory.py items.csv [--min-qty N]
++    python3 inventory.py items.csv [--min-qty N] [--format {table,json}]
++
++- `--min-qty N` — only show rows with quantity at least N (default 0).
++- `--format table` (default) — one aligned row per item.
++- `--format json` — a JSON array of `{name, qty, price}` objects sorted by name.
++
++Rows whose `qty` or `price` cannot be parsed are skipped, with a warning
++(`skipping row N: ...`) on stderr in both formats.
+diff --git c/__pycache__/inventory.cpython-314.pyc i/__pycache__/inventory.cpython-314.pyc
+new file mode 100644
+index 0000000..232861f
+Binary files /dev/null and i/__pycache__/inventory.cpython-314.pyc differ
+diff --git c/inventory.py i/inventory.py
+index db71afe..f7744d4 100644
+--- c/inventory.py
++++ i/inventory.py
+@@ -1,5 +1,6 @@
+ import argparse
+ import csv
++import json
+ import sys
+ 
+ 
+@@ -8,14 +9,36 @@ def load(path):
+         return list(csv.DictReader(f))
+ 
+ 
++def parse_rows(rows, min_qty):
++    items = []
++    for i, r in enumerate(rows, start=1):
++        try:
++            qty = int(r["qty"])
++            price = float(r["price"])
++        except (TypeError, ValueError):
++            print(
++                f"skipping row {i}: unparseable qty/price ({r['qty']!r}, {r['price']!r})",
++                file=sys.stderr,
++            )
++            continue
++        if qty >= min_qty:
++            items.append({"name": r["name"], "qty": qty, "price": price})
++    items.sort(key=lambda d: d["name"])
++    return items
++
++
+ def main(argv=None):
+     ap = argparse.ArgumentParser(description="Report stock levels")
+     ap.add_argument("csv")
+     ap.add_argument("--min-qty", type=int, default=0)
++    ap.add_argument("--format", choices=("table", "json"), default="table")
+     a = ap.parse_args(argv)
+-    rows = [r for r in load(a.csv) if int(r["qty"]) >= a.min_qty]
+-    for r in sorted(rows, key=lambda r: r["name"]):
+-        print(f"{r['name']:<20} {int(r['qty']):>6} {float(r['price']):>10.2f}")
++    items = parse_rows(load(a.csv), a.min_qty)
++    if a.format == "json":
++        print(json.dumps(items))
++    else:
++        for d in items:
++            print(f"{d['name']:<20} {d['qty']:>6} {d['price']:>10.2f}")
+     return 0
+ 
+ 
+diff --git c/tests/__pycache__/test_inventory.cpython-314.pyc i/tests/__pycache__/test_inventory.cpython-314.pyc
+new file mode 100644
+index 0000000..fd916fb
+Binary files /dev/null and i/tests/__pycache__/test_inventory.cpython-314.pyc differ

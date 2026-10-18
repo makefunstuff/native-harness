@@ -18,13 +18,16 @@ CXXFLAGS += -std=c++17 -fPIC -Wall -Wextra -Wno-unused-parameter -Wno-missing-fi
             -I$(NODE_INC) -I$(LLAMA_DIR)/include -I$(LLAMA_DIR)/common -I$(LLAMA_DIR)/ggml/include -I$(LLAMA_DIR)/vendor
 LDFLAGS  += -shared -L$(LIBDIR) -Wl,-rpath,$(LIBDIR) -lllama-common -lllama -lggml -lggml-base -pthread
 
-SRC := engine.cpp service.cpp addon.cpp
+SRC := engine.cpp service.cpp addon.cpp entropy.cpp
 OBJ := $(SRC:%.cpp=build/%.o)
 
 all: build/llama_native.node
 
 build/%.o: %.cpp *.h | build
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+build/entropy.o: entropy.cpp | build
+	$(CXX) $(CXXFLAGS) -O3 -ffast-math -march=native -c $< -o $@
 
 build/llama_native.node: $(OBJ)
 	$(CXX) $(OBJ) -o $@ $(LDFLAGS)

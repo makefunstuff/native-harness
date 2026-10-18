@@ -1,0 +1,23 @@
+0.00.047.992 W DEPRECATED: argument '--parallel' specified multiple times, use comma-separated values instead (only last value will be used)
+0.00.492.743 W model has unused tensor blk.64.attn_norm.weight (size = 20480 bytes) -- ignoring
+0.00.492.748 W model has unused tensor blk.64.post_attention_norm.weight (size = 20480 bytes) -- ignoring
+0.00.492.753 W model has unused tensor blk.64.attn_q.weight (size = 66846720 bytes) -- ignoring
+0.00.492.755 W model has unused tensor blk.64.attn_k.weight (size = 5570560 bytes) -- ignoring
+0.00.492.756 W model has unused tensor blk.64.attn_v.weight (size = 5570560 bytes) -- ignoring
+0.00.492.762 W model has unused tensor blk.64.attn_output.weight (size = 33423360 bytes) -- ignoring
+0.00.492.763 W model has unused tensor blk.64.attn_q_norm.weight (size = 1024 bytes) -- ignoring
+0.00.492.765 W model has unused tensor blk.64.attn_k_norm.weight (size = 1024 bytes) -- ignoring
+0.00.492.767 W model has unused tensor blk.64.ffn_gate.weight (size = 94699520 bytes) -- ignoring
+0.00.492.768 W model has unused tensor blk.64.ffn_down.weight (size = 94699520 bytes) -- ignoring
+0.00.492.770 W model has unused tensor blk.64.ffn_up.weight (size = 94699520 bytes) -- ignoring
+0.00.492.772 W model has unused tensor blk.64.nextn.eh_proj.weight (size = 55705600 bytes) -- ignoring
+0.00.492.774 W model has unused tensor blk.64.nextn.enorm.weight (size = 20480 bytes) -- ignoring
+0.00.492.776 W model has unused tensor blk.64.nextn.hnorm.weight (size = 20480 bytes) -- ignoring
+0.00.492.783 W model has unused tensor blk.64.nextn.shared_head_norm.weight (size = 20480 bytes) -- ignoring
+0.04.289.084 I cmn          init: llama threadpool init, n_threads = 12
+0.04.289.113 W cmn  common_init_: KV cache shifting is not supported for this context, disabling KV cache shifting
+0.04.416.675 I common_speculative_init_result: loading draft model '/data/hfmodels/gguf/drafters/Qwen3.8-27B-DFlash2-Q4_K_M-ownhead.gguf'
+0.06.472.484 I common_speculative_impl_draft_dflash: adding speculative implementation 'draft-dflash'
+0.06.472.488 I common_speculative_impl_draft_dflash: - n_max=7, n_min=0, p_min=0.00
+0.06.472.489 I common_speculative_impl_draft_dflash: - block_size=8, mask_token_id=248070, n_extract=5, sample_from_anchor=true
+0.06.495.437 I engine: n_ctx=131072 n_seq_max=2 seq_rm(tgt)=3 seq_rm(dft)=1 n_rs_seq=7 spec=on

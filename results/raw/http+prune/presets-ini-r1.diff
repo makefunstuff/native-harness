@@ -1,0 +1,87 @@
+ 3 files changed, 72 insertions(+)
+diff --git c/__pycache__/presets.cpython-314.pyc i/__pycache__/presets.cpython-314.pyc
+new file mode 100644
+index 0000000..fe3282d
+Binary files /dev/null and i/__pycache__/presets.cpython-314.pyc differ
+diff --git c/presets.py i/presets.py
+new file mode 100644
+index 0000000..415216c
+--- /dev/null
++++ i/presets.py
+@@ -0,0 +1,72 @@
++"""Reader for llama.cpp router preset files (INI-like).
++
++Hand-rolled parser: split on the first '=' only, preserve duplicate keys and
++keys with '=' in their values. No configparser.
++"""
++
++import sys
++
++
++def _parse_lines(lines):
++    """Parse lines into (defaults, sections). sections is an ordered dict."""
++    defaults = {}
++    sections = {}
++
++    # Keys before the first [section] go into defaults.
++    globals_section = defaults
++    for lineno, raw in enumerate(lines, start=1):
++        line = raw.strip()
++        if not line:
++            continue
++        if line[0] in ("#", ";"):
++            continue
++        if line.startswith("[") and line.endswith("]") and len(line) > 2:
++            name = line[1:-1].strip()
++            if name in sections:
++                raise ValueError(f"line {lineno}: duplicate section [{name}]")
++            sections[name] = {}
++            globals_section = sections[name]
++            continue
++        if "=" not in line:
++            raise ValueError(f"line {lineno}: expected 'key = value' or [section]: {line!r}")
++        key, _, value = line.partition("=")
++        globals_section[key.strip()] = value.strip()
++
++    return defaults, sections
++
++
++def load_presets(path):
++    """Load preset file; return {preset name: merged key->value} in file order."""
++    with open(path, encoding="utf-8") as f:
++        defaults, sections = _parse_lines(f.readlines())
++    result = {}
++    for name, keys in sections.items():
++        merged = dict(defaults)
++        merged.update(keys)
++        result[name] = merged
++    return result
++
++
++def _fmt(presets):
++    out = []
++    for name, keys in presets.items():
++        ctx = keys.get("ctx-size", "-")
++        device = keys.get("device", "-")
++        split = keys.get("split-mode", "layer")
++        draft = "yes" if "spec-draft-model" in keys else "no"
++        out.append(f"{name} ctx={ctx} devices={device} split={split} draft={draft}")
++    return out
++
++
++def main(argv=None):
++    argv = sys.argv[1:] if argv is None else argv
++    if len(argv) != 1:
++        print("usage: presets.py FILE", file=sys.stderr)
++        return 2
++    for line in _fmt(load_presets(argv[0])):
++        print(line)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git c/tests/__pycache__/test_presets.cpython-314.pyc i/tests/__pycache__/test_presets.cpython-314.pyc
+new file mode 100644
+index 0000000..9333b2b
+Binary files /dev/null and i/tests/__pycache__/test_presets.cpython-314.pyc differ

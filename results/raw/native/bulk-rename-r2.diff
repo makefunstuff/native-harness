@@ -1,0 +1,882 @@
+ 30 files changed, 109 insertions(+), 90 deletions(-)
+diff --git c/README.md i/README.md
+index 7508898..4f0038a 100644
+--- c/README.md
++++ i/README.md
+@@ -1,3 +1,11 @@
+ # shop
+ 
+-Use `shop.money.calc_total(items, tax)` to total a list of `(price, qty)` pairs.
++Use `shop.money.order_total(items, *, tax_rate)` to total a list of `(price, qty)` pairs.
++The tax rate is keyword-only and is a fraction (e.g. `0.2` for 20%):
++
++```python
++order_total([(10, 2), (1.5, 1)], tax_rate=0.2)  # Decimal("25.80")
++```
++
++`shop.money.calc_total(items, tax)` remains as a deprecated alias that emits a
++`DeprecationWarning` and returns the same value as `order_total`.
+diff --git c/shop/__pycache__/__init__.cpython-314.pyc i/shop/__pycache__/__init__.cpython-314.pyc
+new file mode 100644
+index 0000000..6f596d9
+Binary files /dev/null and i/shop/__pycache__/__init__.cpython-314.pyc differ
+diff --git c/shop/__pycache__/audit.cpython-314.pyc i/shop/__pycache__/audit.cpython-314.pyc
+new file mode 100644
+index 0000000..1716de8
+Binary files /dev/null and i/shop/__pycache__/audit.cpython-314.pyc differ
+diff --git c/shop/__pycache__/cart.cpython-314.pyc i/shop/__pycache__/cart.cpython-314.pyc
+new file mode 100644
+index 0000000..d241d0a
+Binary files /dev/null and i/shop/__pycache__/cart.cpython-314.pyc differ
+diff --git c/shop/__pycache__/checkout.cpython-314.pyc i/shop/__pycache__/checkout.cpython-314.pyc
+new file mode 100644
+index 0000000..b478243
+Binary files /dev/null and i/shop/__pycache__/checkout.cpython-314.pyc differ
+diff --git c/shop/__pycache__/coupons.cpython-314.pyc i/shop/__pycache__/coupons.cpython-314.pyc
+new file mode 100644
+index 0000000..2c6e1fd
+Binary files /dev/null and i/shop/__pycache__/coupons.cpython-314.pyc differ
+diff --git c/shop/__pycache__/exports.cpython-314.pyc i/shop/__pycache__/exports.cpython-314.pyc
+new file mode 100644
+index 0000000..1c1f99e
+Binary files /dev/null and i/shop/__pycache__/exports.cpython-314.pyc differ
+diff --git c/shop/__pycache__/invoice.cpython-314.pyc i/shop/__pycache__/invoice.cpython-314.pyc
+new file mode 100644
+index 0000000..3693c52
+Binary files /dev/null and i/shop/__pycache__/invoice.cpython-314.pyc differ
+diff --git c/shop/__pycache__/money.cpython-314.pyc i/shop/__pycache__/money.cpython-314.pyc
+new file mode 100644
+index 0000000..53cf562
+Binary files /dev/null and i/shop/__pycache__/money.cpython-314.pyc differ
+diff --git c/shop/__pycache__/pos.cpython-314.pyc i/shop/__pycache__/pos.cpython-314.pyc
+new file mode 100644
+index 0000000..5da2ba5
+Binary files /dev/null and i/shop/__pycache__/pos.cpython-314.pyc differ
+diff --git c/shop/__pycache__/refunds.cpython-314.pyc i/shop/__pycache__/refunds.cpython-314.pyc
+new file mode 100644
+index 0000000..0d97489
+Binary files /dev/null and i/shop/__pycache__/refunds.cpython-314.pyc differ
+diff --git c/shop/__pycache__/reports.cpython-314.pyc i/shop/__pycache__/reports.cpython-314.pyc
+new file mode 100644
+index 0000000..c368400
+Binary files /dev/null and i/shop/__pycache__/reports.cpython-314.pyc differ
+diff --git c/shop/__pycache__/shipping.cpython-314.pyc i/shop/__pycache__/shipping.cpython-314.pyc
+new file mode 100644
+index 0000000..fa47d73
+Binary files /dev/null and i/shop/__pycache__/shipping.cpython-314.pyc differ
+diff --git c/shop/__pycache__/subscriptions.cpython-314.pyc i/shop/__pycache__/subscriptions.cpython-314.pyc
+new file mode 100644
+index 0000000..91e5a55
+Binary files /dev/null and i/shop/__pycache__/subscriptions.cpython-314.pyc differ
+diff --git c/shop/__pycache__/wholesale.cpython-314.pyc i/shop/__pycache__/wholesale.cpython-314.pyc
+new file mode 100644
+index 0000000..1757834
+Binary files /dev/null and i/shop/__pycache__/wholesale.cpython-314.pyc differ
+diff --git c/shop/audit.py i/shop/audit.py
+index 1c5a22b..02c33bc 100644
+--- c/shop/audit.py
++++ i/shop/audit.py
+@@ -1,5 +1,5 @@
+ """The audit module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.21
+ 
+@@ -17,7 +17,7 @@ def audit_case_0(items, discount=0):
+     # step 8: log the input
+     # step 9: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -38,7 +38,7 @@ def audit_case_1(items, discount=0):
+     # step 12: convert the input
+     # step 13: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -51,7 +51,7 @@ def audit_case_2(items, discount=0):
+     # step 4: validate the input
+     # step 5: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -67,7 +67,7 @@ def audit_case_3(items, discount=0):
+     # step 7: log the input
+     # step 8: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -82,7 +82,7 @@ def audit_case_4(items, discount=0):
+     # step 6: convert the input
+     # step 7: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -97,5 +97,5 @@ def audit_case_5(items, discount=0):
+     # step 6: log the input
+     # step 7: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/cart.py i/shop/cart.py
+index 77ac12c..ef07b4d 100644
+--- c/shop/cart.py
++++ i/shop/cart.py
+@@ -1,5 +1,5 @@
+ """The cart module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.10
+ 
+@@ -19,7 +19,7 @@ def cart_case_0(items, discount=0):
+     # step 10: normalise the input
+     # step 11: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -35,7 +35,7 @@ def cart_case_1(items, discount=0):
+     # step 7: round the input
+     # step 8: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -48,7 +48,7 @@ def cart_case_2(items, discount=0):
+     # step 4: log the input
+     # step 5: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -65,7 +65,7 @@ def cart_case_3(items, discount=0):
+     # step 8: round the input
+     # step 9: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -81,7 +81,7 @@ def cart_case_4(items, discount=0):
+     # step 7: log the input
+     # step 8: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -97,5 +97,5 @@ def cart_case_5(items, discount=0):
+     # step 7: log the input
+     # step 8: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/checkout.py i/shop/checkout.py
+index 08d4079..8c39e1b 100644
+--- c/shop/checkout.py
++++ i/shop/checkout.py
+@@ -1,5 +1,5 @@
+ """The checkout module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.11
+ 
+@@ -21,7 +21,7 @@ def checkout_case_0(items, discount=0):
+     # step 12: log the input
+     # step 13: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -35,7 +35,7 @@ def checkout_case_1(items, discount=0):
+     # step 5: log the input
+     # step 6: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -54,7 +54,7 @@ def checkout_case_2(items, discount=0):
+     # step 10: log the input
+     # step 11: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -73,7 +73,7 @@ def checkout_case_3(items, discount=0):
+     # step 10: log the input
+     # step 11: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -89,7 +89,7 @@ def checkout_case_4(items, discount=0):
+     # step 7: convert the input
+     # step 8: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -106,5 +106,5 @@ def checkout_case_5(items, discount=0):
+     # step 8: validate the input
+     # step 9: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/coupons.py i/shop/coupons.py
+index b5234b8..b1d5a0f 100644
+--- c/shop/coupons.py
++++ i/shop/coupons.py
+@@ -1,5 +1,5 @@
+ """The coupons module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.16
+ 
+@@ -13,7 +13,7 @@ def coupons_case_0(items, discount=0):
+     # step 4: round the input
+     # step 5: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -27,7 +27,7 @@ def coupons_case_1(items, discount=0):
+     # step 5: log the input
+     # step 6: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -43,7 +43,7 @@ def coupons_case_2(items, discount=0):
+     # step 7: log the input
+     # step 8: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -57,7 +57,7 @@ def coupons_case_3(items, discount=0):
+     # step 5: log the input
+     # step 6: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -72,7 +72,7 @@ def coupons_case_4(items, discount=0):
+     # step 6: round the input
+     # step 7: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -89,5 +89,5 @@ def coupons_case_5(items, discount=0):
+     # step 8: log the input
+     # step 9: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/exports.py i/shop/exports.py
+index deda0b1..f96b794 100644
+--- c/shop/exports.py
++++ i/shop/exports.py
+@@ -1,5 +1,5 @@
+ """The exports module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.20
+ 
+@@ -13,7 +13,7 @@ def exports_case_0(items, discount=0):
+     # step 4: validate the input
+     # step 5: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -26,7 +26,7 @@ def exports_case_1(items, discount=0):
+     # step 4: validate the input
+     # step 5: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -40,7 +40,7 @@ def exports_case_2(items, discount=0):
+     # step 5: convert the input
+     # step 6: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -53,7 +53,7 @@ def exports_case_3(items, discount=0):
+     # step 4: normalise the input
+     # step 5: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -73,7 +73,7 @@ def exports_case_4(items, discount=0):
+     # step 11: normalise the input
+     # step 12: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -90,5 +90,5 @@ def exports_case_5(items, discount=0):
+     # step 8: round the input
+     # step 9: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/invoice.py i/shop/invoice.py
+index af22540..bea9484 100644
+--- c/shop/invoice.py
++++ i/shop/invoice.py
+@@ -1,5 +1,5 @@
+ """The invoice module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.12
+ 
+@@ -20,7 +20,7 @@ def invoice_case_0(items, discount=0):
+     # step 11: validate the input
+     # step 12: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -38,7 +38,7 @@ def invoice_case_1(items, discount=0):
+     # step 9: round the input
+     # step 10: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -57,7 +57,7 @@ def invoice_case_2(items, discount=0):
+     # step 10: convert the input
+     # step 11: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -72,7 +72,7 @@ def invoice_case_3(items, discount=0):
+     # step 6: normalise the input
+     # step 7: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -87,7 +87,7 @@ def invoice_case_4(items, discount=0):
+     # step 6: round the input
+     # step 7: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -103,5 +103,5 @@ def invoice_case_5(items, discount=0):
+     # step 7: validate the input
+     # step 8: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/money.py i/shop/money.py
+index 81ad998..7de8d1b 100644
+--- c/shop/money.py
++++ i/shop/money.py
+@@ -1,4 +1,5 @@
+ """Money helpers shared by every shop module."""
++import warnings
+ from decimal import Decimal, ROUND_HALF_UP
+ 
+ CENT = Decimal("0.01")
+@@ -8,7 +9,17 @@ def to_money(x):
+     return Decimal(str(x)).quantize(CENT, rounding=ROUND_HALF_UP)
+ 
+ 
+-def calc_total(items, tax):
+-    """Total of (price, qty) pairs plus tax; tax is a fraction (0.2 = 20%)."""
++def order_total(items, *, tax_rate):
++    """Total of (price, qty) pairs plus tax; tax_rate is a fraction (0.2 = 20%)."""
+     sub = sum((to_money(p) * q for p, q in items), Decimal("0"))
+-    return to_money(sub * (1 + Decimal(str(tax))))
++    return to_money(sub * (1 + Decimal(str(tax_rate))))
++
++
++def calc_total(items, tax):
++    """Deprecated alias for order_total; use order_total(items, tax_rate=tax)."""
++    warnings.warn(
++        "calc_total is deprecated; use order_total(items, tax_rate=...) instead.",
++        DeprecationWarning,
++        stacklevel=2,
++    )
++    return order_total(items, tax_rate=tax)
+diff --git c/shop/pos.py i/shop/pos.py
+index f0159fb..af25756 100644
+--- c/shop/pos.py
++++ i/shop/pos.py
+@@ -1,5 +1,5 @@
+ """The pos module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.19
+ 
+@@ -18,7 +18,7 @@ def pos_case_0(items, discount=0):
+     # step 9: log the input
+     # step 10: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -34,7 +34,7 @@ def pos_case_1(items, discount=0):
+     # step 7: normalise the input
+     # step 8: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -49,7 +49,7 @@ def pos_case_2(items, discount=0):
+     # step 6: convert the input
+     # step 7: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -66,7 +66,7 @@ def pos_case_3(items, discount=0):
+     # step 8: normalise the input
+     # step 9: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -82,7 +82,7 @@ def pos_case_4(items, discount=0):
+     # step 7: convert the input
+     # step 8: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -98,5 +98,5 @@ def pos_case_5(items, discount=0):
+     # step 7: log the input
+     # step 8: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/refunds.py i/shop/refunds.py
+index 6f08f96..218713e 100644
+--- c/shop/refunds.py
++++ i/shop/refunds.py
+@@ -1,5 +1,5 @@
+ """The refunds module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.13
+ 
+@@ -21,7 +21,7 @@ def refunds_case_0(items, discount=0):
+     # step 12: log the input
+     # step 13: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -37,7 +37,7 @@ def refunds_case_1(items, discount=0):
+     # step 7: normalise the input
+     # step 8: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -51,7 +51,7 @@ def refunds_case_2(items, discount=0):
+     # step 5: log the input
+     # step 6: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -70,7 +70,7 @@ def refunds_case_3(items, discount=0):
+     # step 10: round the input
+     # step 11: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.24)
++    total = order_total(items, tax_rate=0.24)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -91,7 +91,7 @@ def refunds_case_4(items, discount=0):
+     # step 12: validate the input
+     # step 13: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -109,5 +109,5 @@ def refunds_case_5(items, discount=0):
+     # step 9: convert the input
+     # step 10: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/reports.py i/shop/reports.py
+index 472a6a2..eaa6abc 100644
+--- c/shop/reports.py
++++ i/shop/reports.py
+@@ -1,5 +1,5 @@
+ """The reports module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.14
+ 
+@@ -21,7 +21,7 @@ def reports_case_0(items, discount=0):
+     # step 12: round the input
+     # step 13: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -35,7 +35,7 @@ def reports_case_1(items, discount=0):
+     # step 5: normalise the input
+     # step 6: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -56,7 +56,7 @@ def reports_case_2(items, discount=0):
+     # step 12: round the input
+     # step 13: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -77,7 +77,7 @@ def reports_case_3(items, discount=0):
+     # step 12: convert the input
+     # step 13: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -91,7 +91,7 @@ def reports_case_4(items, discount=0):
+     # step 5: convert the input
+     # step 6: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -111,5 +111,5 @@ def reports_case_5(items, discount=0):
+     # step 11: normalise the input
+     # step 12: log the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/shipping.py i/shop/shipping.py
+index 08786ed..498945f 100644
+--- c/shop/shipping.py
++++ i/shop/shipping.py
+@@ -1,5 +1,5 @@
+ """The shipping module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.17
+ 
+@@ -21,7 +21,7 @@ def shipping_case_0(items, discount=0):
+     # step 12: validate the input
+     # step 13: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -40,7 +40,7 @@ def shipping_case_1(items, discount=0):
+     # step 10: validate the input
+     # step 11: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -56,7 +56,7 @@ def shipping_case_2(items, discount=0):
+     # step 7: convert the input
+     # step 8: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -77,7 +77,7 @@ def shipping_case_3(items, discount=0):
+     # step 12: log the input
+     # step 13: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -93,7 +93,7 @@ def shipping_case_4(items, discount=0):
+     # step 7: normalise the input
+     # step 8: round the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -108,5 +108,5 @@ def shipping_case_5(items, discount=0):
+     # step 6: normalise the input
+     # step 7: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/subscriptions.py i/shop/subscriptions.py
+index 62f5abf..c269fb2 100644
+--- c/shop/subscriptions.py
++++ i/shop/subscriptions.py
+@@ -1,5 +1,5 @@
+ """The subscriptions module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.15
+ 
+@@ -21,7 +21,7 @@ def subscriptions_case_0(items, discount=0):
+     # step 12: normalise the input
+     # step 13: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -34,7 +34,7 @@ def subscriptions_case_1(items, discount=0):
+     # step 4: log the input
+     # step 5: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -52,7 +52,7 @@ def subscriptions_case_2(items, discount=0):
+     # step 9: log the input
+     # step 10: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -66,7 +66,7 @@ def subscriptions_case_3(items, discount=0):
+     # step 5: round the input
+     # step 6: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -79,7 +79,7 @@ def subscriptions_case_4(items, discount=0):
+     # step 4: log the input
+     # step 5: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0)
++    total = order_total(items, tax_rate=0)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -96,5 +96,5 @@ def subscriptions_case_5(items, discount=0):
+     # step 8: log the input
+     # step 9: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/shop/wholesale.py i/shop/wholesale.py
+index 098b6ae..6adea50 100644
+--- c/shop/wholesale.py
++++ i/shop/wholesale.py
+@@ -1,5 +1,5 @@
+ """The wholesale module."""
+-from shop.money import calc_total, to_money
++from shop.money import order_total, to_money
+ 
+ TAX = 0.18
+ 
+@@ -17,7 +17,7 @@ def wholesale_case_0(items, discount=0):
+     # step 8: convert the input
+     # step 9: normalise the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -34,7 +34,7 @@ def wholesale_case_1(items, discount=0):
+     # step 8: log the input
+     # step 9: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -48,7 +48,7 @@ def wholesale_case_2(items, discount=0):
+     # step 5: log the input
+     # step 6: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.09)
++    total = order_total(items, tax_rate=0.09)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -62,7 +62,7 @@ def wholesale_case_3(items, discount=0):
+     # step 5: normalise the input
+     # step 6: validate the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=TAX)
++    total = order_total(items, tax_rate=TAX)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -82,7 +82,7 @@ def wholesale_case_4(items, discount=0):
+     # step 11: log the input
+     # step 12: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, tax=0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+ 
+ 
+@@ -95,5 +95,5 @@ def wholesale_case_5(items, discount=0):
+     # step 4: convert the input
+     # step 5: convert the input
+     items = [(p, q) for p, q in items if q > 0]
+-    total = calc_total(items, 0.2)
++    total = order_total(items, tax_rate=0.2)
+     return max(to_money(0), total - to_money(discount))
+diff --git c/tests/__pycache__/test_money.cpython-314.pyc i/tests/__pycache__/test_money.cpython-314.pyc
+new file mode 100644
+index 0000000..8094ff8
+Binary files /dev/null and i/tests/__pycache__/test_money.cpython-314.pyc differ
+diff --git c/tests/test_money.py i/tests/test_money.py
+index 94ffe90..b0fbecf 100644
+--- c/tests/test_money.py
++++ i/tests/test_money.py
+@@ -1,10 +1,10 @@
+ import unittest
+-from shop.money import calc_total
++from shop.money import order_total
+ 
+ 
+ class T(unittest.TestCase):
+     def test_total(self):
+-        self.assertEqual(str(calc_total([(10, 2), (1.5, 1)], 0.2)), "25.80")
++        self.assertEqual(str(order_total([(10, 2), (1.5, 1)], tax_rate=0.2)), "25.80")
+ 
+ 
+ if __name__ == "__main__":

@@ -371,6 +371,32 @@ ojson Service::chat(const ojson & req, const std::function<void(const std::strin
         emit(ojson({{"t", "c"}, {"d", msg.content.substr(sent_content.size())}}).dump());
     }
 
+    // uncertainty: entropy over the whole message and over the part after the reasoning
+    ojson ent = ojson::object();
+    if (!res.entropy.empty()) {
+        size_t act_from = 0;
+        {
+            std::string acc_t;
+            const auto & ends = session.thinking_end_tags();
+            for (size_t i = 0; i < res.tokens.size() && !ends.empty(); ++i) {
+                acc_t += eng->piece(res.tokens[i], true);
+                if (acc_t.find(ends[0]) != std::string::npos) { act_from = i + 1; break; }
+            }
+        }
+        auto stats_of = [](std::vector<float> v) {
+            v.erase(std::remove_if(v.begin(), v.end(), [](float x) { return std::isnan(x); }), v.end());
+            if (v.empty()) return ojson::object();
+            double sum = 0; int hi = 0; float mx = 0;
+            for (float x : v) { sum += x; hi += x > 1.5f; mx = std::max(mx, x); }
+            std::sort(v.begin(), v.end());
+            return ojson({{"n", v.size()}, {"mean", sum / v.size()}, {"p90", v[(size_t) (0.9 * (v.size() - 1))]},
+                          {"max", mx}, {"frac_high", (double) hi / v.size()}});
+        };
+        ent["all"] = stats_of(res.entropy);
+        if (act_from < res.entropy.size()) {
+            ent["act"] = stats_of(std::vector<float>(res.entropy.begin() + act_from, res.entropy.end()));
+        }
+    }
     const auto & s = eng->stats;
     ojson tcs = ojson::array();
     for (auto & t : msg.tool_calls) tcs.push_back({{"id", t.id}, {"name", t.name}, {"arguments", t.arguments}});
@@ -408,6 +434,7 @@ ojson Service::chat(const ojson & req, const std::function<void(const std::strin
             {"inexact_bounds", r.n_inexact},
             {"cache_mode", mode},
             {"tool_grammar", grammar},
+            {"entropy", ent},
         }},
     };
     return out;

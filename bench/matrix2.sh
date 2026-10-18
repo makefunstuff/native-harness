@@ -22,4 +22,9 @@ for r in 1 2; do
   lc http+prune --provider llama.cpp --exp prune --round $r
 done
 scripts/baseline-down.sh
+# "HTTP done well" baseline
+EXTRA_ARGS_FILE=configs/http-tuned.args scripts/baseline-up.sh || exit 1
+run http-tuned --provider llama.cpp --rounds 2
+for r in 1 2; do lc http-tuned --provider llama.cpp --round $r; lc http-tuned+prune --provider llama.cpp --exp prune --round $r; done
+scripts/baseline-down.sh
 echo MATRIX2 DONE

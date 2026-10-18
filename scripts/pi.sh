@@ -5,4 +5,7 @@
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 export PI_CODING_AGENT_DIR=${PI_CODING_AGENT_DIR:-$HOME/.cache/native-harness/pi-agent}
 for v in $(env | grep -oE '^(HERDR|ORCA)_[A-Z0-9_]*'); do unset "$v"; done
+# temp files (bash output spills, compile cache) on disk, not in a shared tmpfs
+export TMPDIR=${NH_TMPDIR:-$HOME/.cache/native-harness/tmp}
+mkdir -p "$TMPDIR"
 exec pi "$@"

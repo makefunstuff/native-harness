@@ -1,0 +1,152 @@
+ 9 files changed, 83 insertions(+), 5 deletions(-)
+diff --git c/svc/__pycache__/__init__.cpython-314.pyc i/svc/__pycache__/__init__.cpython-314.pyc
+new file mode 100644
+index 0000000..e0ab673
+Binary files /dev/null and i/svc/__pycache__/__init__.cpython-314.pyc differ
+diff --git c/svc/__pycache__/client.cpython-314.pyc i/svc/__pycache__/client.cpython-314.pyc
+new file mode 100644
+index 0000000..9d61845
+Binary files /dev/null and i/svc/__pycache__/client.cpython-314.pyc differ
+diff --git c/svc/__pycache__/config.cpython-314.pyc i/svc/__pycache__/config.cpython-314.pyc
+new file mode 100644
+index 0000000..ced3c3c
+Binary files /dev/null and i/svc/__pycache__/config.cpython-314.pyc differ
+diff --git c/svc/__pycache__/server.cpython-314.pyc i/svc/__pycache__/server.cpython-314.pyc
+new file mode 100644
+index 0000000..1b718fa
+Binary files /dev/null and i/svc/__pycache__/server.cpython-314.pyc differ
+diff --git c/svc/client.py i/svc/client.py
+index 2755f9a..bf968b8 100644
+--- c/svc/client.py
++++ i/svc/client.py
+@@ -4,4 +4,4 @@ class Client:
+ 
+     def request_options(self):
+         return {"url": f"http://{self.config.host}:{self.config.port}/",
+-                "timeout": self.config.timeout}
++                "timeout": self.config.timeout_s}
+diff --git c/svc/config.py i/svc/config.py
+index c95bd2e..87f2779 100644
+--- c/svc/config.py
++++ i/svc/config.py
+@@ -1,9 +1,44 @@
++import warnings
++
++
+ class Config:
+-    def __init__(self, host, port, timeout):
++    def __init__(self, host, port, timeout_s):
+         self.host = host
+         self.port = port
+-        self.timeout = timeout
++        self.timeout_s = timeout_s
++
++    @property
++    def timeout(self):
++        warnings.warn(
++            "Config.timeout is deprecated; use Config.timeout_s instead",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++        return self.timeout_s
+ 
+ 
+ def load_config(d):
+-    return Config(d.get("host", "127.0.0.1"), int(d.get("port", 8080)), d.get("timeout", 30))
++    host = d.get("host", "127.0.0.1")
++    port = int(d.get("port", 8080))
++
++    if "timeout" in d and "timeout_s" in d:
++        raise ValueError("Both 'timeout' and 'timeout_s' were given; use only 'timeout_s'")
++
++    if "timeout_s" in d:
++        timeout_s = d["timeout_s"]
++    elif "timeout" in d:
++        warnings.warn(
++            "Config key 'timeout' is deprecated; use 'timeout_s' instead",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++        timeout_s = d["timeout"]
++    else:
++        timeout_s = 30
++
++    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
++        raise ValueError(f"'timeout_s' must be a number, got {type(timeout_s).__name__}")
++    if timeout_s <= 0:
++        raise ValueError(f"'timeout_s' must be a positive number, got {timeout_s!r}")
++
++    return Config(host, port, timeout_s)
+diff --git c/svc/server.py i/svc/server.py
+index 0cf75ae..a0520c3 100644
+--- c/svc/server.py
++++ i/svc/server.py
+@@ -3,4 +3,4 @@ class Server:
+         self.config = config
+ 
+     def keepalive_deadline(self, now):
+-        return now + 2 * self.config.timeout
++        return now + 2 * self.config.timeout_s
+diff --git c/tests/__pycache__/test_config.cpython-314.pyc i/tests/__pycache__/test_config.cpython-314.pyc
+new file mode 100644
+index 0000000..c959349
+Binary files /dev/null and i/tests/__pycache__/test_config.cpython-314.pyc differ
+diff --git c/tests/test_config.py i/tests/test_config.py
+index 954613d..29d69c9 100644
+--- c/tests/test_config.py
++++ i/tests/test_config.py
+@@ -1,11 +1,54 @@
+ import unittest
++import warnings
+ from svc.config import load_config
++from svc.client import Client
++from svc.server import Server
+ 
+ 
+ class ConfigTest(unittest.TestCase):
+     def test_defaults(self):
+         c = load_config({})
+         self.assertEqual(c.port, 8080)
++        self.assertEqual(c.host, "127.0.0.1")
++        self.assertEqual(c.timeout_s, 30)
++
++    def test_timeout_s(self):
++        c = load_config({"timeout_s": 5})
++        self.assertEqual(c.timeout_s, 5)
++
++        c = load_config({"timeout_s": 2.5})
++        self.assertEqual(c.timeout_s, 2.5)
++
++    def test_old_timeout_key_warns(self):
++        with self.assertWarns(DeprecationWarning):
++            c = load_config({"timeout": 7})
++        self.assertEqual(c.timeout_s, 7)
++
++    def test_both_keys_raise(self):
++        with self.assertRaises(ValueError):
++            load_config({"timeout": 5, "timeout_s": 6})
++
++    def test_invalid_timeout_s(self):
++        for bad in (0, -1, -3.5, "30", None, True):
++            with self.assertRaises(ValueError):
++                load_config({"timeout_s": bad})
++
++    def test_old_attribute_warns(self):
++        c = load_config({"timeout_s": 10})
++        with self.assertWarns(DeprecationWarning):
++            self.assertEqual(c.timeout, 10)
++
++    def test_timeout_is_read_only(self):
++        c = load_config({"timeout_s": 10})
++        with self.assertRaises(AttributeError):
++            c.timeout = 5
++
++    def test_client_and_server_no_warnings(self):
++        c = load_config({"timeout_s": 15})
++        with warnings.catch_warnings():
++            warnings.simplefilter("error", DeprecationWarning)
++            self.assertEqual(Client(c).request_options()["timeout"], 15)
++            self.assertEqual(Server(c).keepalive_deadline(100), 130)
+ 
+ 
+ if __name__ == "__main__":

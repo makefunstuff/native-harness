@@ -1,0 +1,9 @@
+ 2 files changed, 0 insertions(+), 0 deletions(-)
+diff --git c/__pycache__/ttlcache.cpython-314.pyc i/__pycache__/ttlcache.cpython-314.pyc
+new file mode 100644
+index 0000000..5fa0ef8
+Binary files /dev/null and i/__pycache__/ttlcache.cpython-314.pyc differ
+diff --git c/tests/__pycache__/test_ttlcache.cpython-314.pyc i/tests/__pycache__/test_ttlcache.cpython-314.pyc
+new file mode 100644
+index 0000000..0b7dd9b
+Binary files /dev/null and i/tests/__pycache__/test_ttlcache.cpython-314.pyc differ

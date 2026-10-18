@@ -1,0 +1,64 @@
+ 4 files changed, 25 insertions(+), 11 deletions(-)
+diff --git c/logstats/__pycache__/__init__.cpython-314.pyc i/logstats/__pycache__/__init__.cpython-314.pyc
+new file mode 100644
+index 0000000..08a74ed
+Binary files /dev/null and i/logstats/__pycache__/__init__.cpython-314.pyc differ
+diff --git c/logstats/__pycache__/parser.cpython-314.pyc i/logstats/__pycache__/parser.cpython-314.pyc
+new file mode 100644
+index 0000000..e8ad181
+Binary files /dev/null and i/logstats/__pycache__/parser.cpython-314.pyc differ
+diff --git c/logstats/parser.py i/logstats/parser.py
+index d664386..62a901f 100644
+--- c/logstats/parser.py
++++ i/logstats/parser.py
+@@ -2,21 +2,35 @@
+ 
+     2026-10-01T12:00:00+03:00 GET /api/items 200 123ms
+ """
+-from datetime import datetime
++import math
++from datetime import datetime, timezone
+ 
+ 
+ def parse_line(line):
+-    parts = line.split()
+-    ts = datetime.strptime(parts[0][:19], "%Y-%m-%dT%H:%M:%S")
+-    return {
+-        "time": ts,
+-        "method": parts[1],
+-        "path": parts[2],
+-        "status": int(parts[3]),
+-        "latency_ms": int(parts[4].rstrip("ms")),
+-    }
++    try:
++        parts = line.split()
++        ts_raw = parts[0]
++        if ts_raw.endswith("Z"):
++            ts_raw = ts_raw[:-1] + "+00:00"
++        ts = datetime.fromisoformat(ts_raw)
++        if ts.tzinfo is None:
++            ts = ts.replace(tzinfo=timezone.utc)
++        else:
++            ts = ts.astimezone(timezone.utc)
++        return {
++            "time": ts,
++            "method": parts[1],
++            "path": parts[2],
++            "status": int(parts[3]),
++            "latency_ms": int(parts[4].rstrip("ms")),
++        }
++    except (IndexError, ValueError) as e:
++        raise ValueError(f"malformed log line: {line!r}") from e
+ 
+ 
+ def p95_latency(lines):
+     values = sorted(parse_line(l)["latency_ms"] for l in lines)
+-    return values[int(len(values) * 0.95)]
++    if not values:
++        raise ValueError("p95_latency of an empty sample is undefined")
++    rank = math.ceil(0.95 * len(values))
++    return values[rank - 1]
+diff --git c/tests/__pycache__/test_parser.cpython-314.pyc i/tests/__pycache__/test_parser.cpython-314.pyc
+new file mode 100644
+index 0000000..0cde402
+Binary files /dev/null and i/tests/__pycache__/test_parser.cpython-314.pyc differ

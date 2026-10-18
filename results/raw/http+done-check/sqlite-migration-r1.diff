@@ -1,0 +1,229 @@
+ 4 files changed, 173 insertions(+), 9 deletions(-)
+diff --git c/__pycache__/todo.cpython-314.pyc i/__pycache__/todo.cpython-314.pyc
+new file mode 100644
+index 0000000..f82c542
+Binary files /dev/null and i/__pycache__/todo.cpython-314.pyc differ
+diff --git c/tests/__pycache__/test_todo.cpython-314.pyc i/tests/__pycache__/test_todo.cpython-314.pyc
+new file mode 100644
+index 0000000..33f7a78
+Binary files /dev/null and i/tests/__pycache__/test_todo.cpython-314.pyc differ
+diff --git c/tests/test_todo.py i/tests/test_todo.py
+index c672134..3fd0215 100644
+--- c/tests/test_todo.py
++++ i/tests/test_todo.py
+@@ -1,15 +1,119 @@
+-import os, tempfile, unittest
++import os
++import sqlite3
++import tempfile
++import unittest
+ import todo
+ 
+ 
+ class TodoTest(unittest.TestCase):
+     def test_roundtrip(self):
+         d = tempfile.mkdtemp()
+-        conn = todo.open_db(os.path.join(d, "t.db"))
++        conn = self.conn = todo.open_db(os.path.join(d, "t.db"))
+         i = todo.add_task(conn, "write tests")
+         todo.complete(conn, i)
+         self.assertTrue(todo.list_tasks(conn)[0]["done"])
+ 
++    def tearDown(self):
++        self.conn.close()
++
++
++class MigrationTest(unittest.TestCase):
++    def tearDown(self):
++        if getattr(self, "conn", None) is not None:
++            self.conn.close()
++
++    def test_new_database_created_at_version_2(self):
++        d = tempfile.mkdtemp()
++        conn = self.conn = todo.open_db(os.path.join(d, "t.db"))
++        self.assertEqual(self._version(conn), 2)
++        cols = self._columns(conn)
++        self.assertIn("due_date", cols)
++
++    def test_legacy_database_migrated_in_place(self):
++        d = tempfile.mkdtemp()
++        path = os.path.join(d, "legacy.db")
++        # Simulate a database from the current release: tasks table, no schema_version.
++        conn = sqlite3.connect(path)
++        conn.execute("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, "
++                     "done INTEGER NOT NULL DEFAULT 0)")
++        conn.executemany("INSERT INTO tasks (title, done) VALUES (?, ?)",
++                         [("old one", 0), ("old two", 1)])
++        conn.commit()
++        conn.close()
++
++        conn = self.conn = todo.open_db(path)
++        self.assertEqual(self._version(conn), 2)
++        tasks = todo.list_tasks(conn)
++        self.assertEqual([(t["title"], t["done"], t["due_date"]) for t in tasks],
++                         [("old one", False, None), ("old two", True, None)])
++
++    def test_reopening_migrated_database_changes_nothing(self):
++        d = tempfile.mkdtemp()
++        path = os.path.join(d, "t.db")
++        conn = todo.open_db(path)
++        i = todo.add_task(conn, "keep me", "2024-01-15")
++        conn.close()
++
++        conn = self.conn = todo.open_db(path)
++        self.assertEqual(self._version(conn), 2)
++        tasks = todo.list_tasks(conn)
++        self.assertEqual(len(tasks), 1)
++        self.assertEqual(tasks[0]["id"], i)
++        self.assertEqual(tasks[0]["due_date"], "2024-01-15")
++
++    @staticmethod
++    def _version(conn):
++        return conn.execute("SELECT version FROM schema_version").fetchone()[0]
++
++    @staticmethod
++    def _columns(conn):
++        return {r[1] for r in conn.execute("PRAGMA table_info(tasks)")}
++
++
++class DueDateTest(unittest.TestCase):
++    def setUp(self):
++        self.d = tempfile.mkdtemp()
++        self.conn = todo.open_db(os.path.join(self.d, "t.db"))
++
++    def tearDown(self):
++        self.conn.close()
++
++    def test_due_date_stored_and_returned(self):
++        todo.add_task(self.conn, "a", "2024-03-01")
++        todo.add_task(self.conn, "b")
++        tasks = {t["title"]: t["due_date"] for t in todo.list_tasks(self.conn)}
++        self.assertEqual(tasks, {"a": "2024-03-01", "b": None})
++
++    def test_invalid_due_date_raises_and_stores_nothing(self):
++        for bad in ["2024-13-01", "01-01-2024", "2024-02-30", "2024-3-1", "tomorrow", 1234]:
++            with self.assertRaises(ValueError, msg=repr(bad)):
++                todo.add_task(self.conn, "x", bad)
++        self.assertEqual(todo.list_tasks(self.conn), [])
++
++
++class OverdueTest(unittest.TestCase):
++    def setUp(self):
++        self.d = tempfile.mkdtemp()
++        self.conn = todo.open_db(os.path.join(self.d, "t.db"))
++
++    def tearDown(self):
++        self.conn.close()
++
++    def test_overdue_filters_and_orders(self):
++        ids = {}
++        for title, due in [("b", "2024-01-05"), ("a", "2024-01-02"), ("c", "2024-01-05"),
++                           ("done", "2024-01-01"), ("today", "2024-01-10"), ("open", None)]:
++            ids[title] = todo.add_task(self.conn, title, due)
++        todo.complete(self.conn, ids["done"])
++        self.assertEqual(todo.overdue(self.conn, "2024-01-10"), ["a", "b", "c"])
++
++    def test_accepts_date_object(self):
++        from datetime import date
++        i = todo.add_task(self.conn, "old", date(2024, 1, 1))
++        todo.add_task(self.conn, "new", date(2024, 6, 1))
++        self.assertEqual(todo.overdue(self.conn, date(2024, 6, 1)), ["old"])
++        self.assertEqual(i, todo.list_tasks(self.conn)[0]["id"])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git c/todo.py i/todo.py
+index 5f8b4ca..dc24677 100644
+--- c/todo.py
++++ i/todo.py
+@@ -1,16 +1,66 @@
++import re
+ import sqlite3
++from datetime import date, datetime
++
++TARGET_VERSION = 2
++
++# Version -> DDL to apply. Each is applied in its own transaction.
++MIGRATIONS = {
++    1: ("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, "
++        "done INTEGER NOT NULL DEFAULT 0)"),
++    2: "ALTER TABLE tasks ADD COLUMN due_date TEXT",
++}
++
++_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
++
++
++def _valid_date(value):
++    """Return True if value is a valid YYYY-MM-DD date string."""
++    return isinstance(value, str) and _DATE_RE.match(value) is not None \
++        and datetime.strptime(value, "%Y-%m-%d") is not None
++
++
++def _coerce_date(value):
++    """Accept a YYYY-MM-DD string or a datetime.date; return the ISO string."""
++    if isinstance(value, date) and not isinstance(value, datetime):
++        return value.isoformat()
++    return value
++
++
++def _current_version(conn):
++    tables = {r[0] for r in conn.execute(
++        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
++        ("schema_version", "tasks"))}
++    if "schema_version" in tables:
++        return conn.execute("SELECT version FROM schema_version").fetchone()[0]
++    if "tasks" in tables:
++        # Existing database from the current release: no version table, but
++        # it already has the version 1 schema.
++        return 1
++    return 0
+ 
+ 
+ def open_db(path):
+     conn = sqlite3.connect(path)
+-    conn.execute("CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, title TEXT NOT NULL, "
+-                 "done INTEGER NOT NULL DEFAULT 0)")
+-    conn.commit()
++    current = _current_version(conn)
++    if "schema_version" not in {r[0] for r in conn.execute(
++            "SELECT name FROM sqlite_master WHERE type = 'table'")}:
++        conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
++        conn.execute("INSERT INTO schema_version (version) VALUES (0)")
++        conn.commit()
++    for version in range(current + 1, TARGET_VERSION + 1):
++        with conn:  # one transaction per migration; failure stays at previous version
++            conn.execute(MIGRATIONS[version])
++            conn.execute("UPDATE schema_version SET version = ?", (version,))
+     return conn
+ 
+ 
+-def add_task(conn, title):
+-    cur = conn.execute("INSERT INTO tasks (title) VALUES (?)", (title,))
++def add_task(conn, title, due_date=None):
++    if due_date is not None:
++        due_date = _coerce_date(due_date)
++        if not _valid_date(due_date):
++            raise ValueError("due_date must be a YYYY-MM-DD date string, got %r" % (due_date,))
++    cur = conn.execute("INSERT INTO tasks (title, due_date) VALUES (?, ?)", (title, due_date))
+     conn.commit()
+     return cur.lastrowid
+ 
+@@ -21,5 +71,15 @@ def complete(conn, task_id):
+ 
+ 
+ def list_tasks(conn):
+-    rows = conn.execute("SELECT id, title, done FROM tasks ORDER BY id").fetchall()
+-    return [{"id": r[0], "title": r[1], "done": bool(r[2])} for r in rows]
++    rows = conn.execute("SELECT id, title, done, due_date FROM tasks ORDER BY id").fetchall()
++    return [{"id": r[0], "title": r[1], "done": bool(r[2]), "due_date": r[3]} for r in rows]
++
++
++def overdue(conn, today):
++    today = _coerce_date(today)
++    if not _valid_date(today):
++        raise ValueError("today must be a YYYY-MM-DD date string, got %r" % (today,))
++    rows = conn.execute(
++        "SELECT title FROM tasks WHERE done = 0 AND due_date IS NOT NULL AND due_date < ? "
++        "ORDER BY due_date, id", (today,)).fetchall()
++    return [r[0] for r in rows]

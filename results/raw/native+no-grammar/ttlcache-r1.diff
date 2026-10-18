@@ -1,0 +1,220 @@
+ 4 files changed, 173 insertions(+), 8 deletions(-)
+diff --git c/__pycache__/ttlcache.cpython-314.pyc i/__pycache__/ttlcache.cpython-314.pyc
+new file mode 100644
+index 0000000..a6d7b09
+Binary files /dev/null and i/__pycache__/ttlcache.cpython-314.pyc differ
+diff --git c/tests/__pycache__/test_ttlcache.cpython-314.pyc i/tests/__pycache__/test_ttlcache.cpython-314.pyc
+new file mode 100644
+index 0000000..d22a48e
+Binary files /dev/null and i/tests/__pycache__/test_ttlcache.cpython-314.pyc differ
+diff --git c/tests/test_ttlcache.py i/tests/test_ttlcache.py
+index 069d133..8b45779 100644
+--- c/tests/test_ttlcache.py
++++ i/tests/test_ttlcache.py
+@@ -1,3 +1,4 @@
++import threading
+ import unittest
+ from ttlcache import TTLCache
+ 
+@@ -10,6 +11,115 @@ class CacheTest(unittest.TestCase):
+         self.assertEqual(c.get_or_compute("a", lambda: calls.append(1) or 6), 5)
+         self.assertEqual(len(calls), 1)
+ 
++    def test_single_flight_same_key(self):
++        calls = []
++        gate = threading.Event()
++        c = TTLCache(60)
++
++        def loader():
++            calls.append(1)
++            gate.wait(5)
++            return 42
++
++        results = []
++        threads = [threading.Thread(target=lambda: results.append(c.get_or_compute("k", loader)))
++                   for _ in range(40)]
++        for t in threads:
++            t.start()
++        gate.wait(0.2)  # let all threads pile up on the loader
++        gate.set()
++        for t in threads:
++            t.join()
++
++        self.assertEqual(len(calls), 1)
++        self.assertEqual(results, [42] * 40)
++        self.assertEqual(c.get_or_compute("k", lambda: "other"), 42)
++
++    def test_different_keys_do_not_block(self):
++        order = []
++        gate_a = threading.Event()
++        c = TTLCache(60)
++
++        def loader_a():
++            order.append(("start", "a"))
++            gate_a.wait(5)
++            order.append(("end", "a"))
++            return "a"
++
++        def loader_b():
++            order.append(("start", "b"))
++            order.append(("end", "b"))
++            return "b"
++
++        ta = threading.Thread(target=lambda: c.get_or_compute("a", loader_a))
++        ta.start()
++        # Block key "a" mid-computation; key "b" must still complete.
++        threading.Event().wait(0.2)
++        self.assertIn(("start", "a"), order)
++        tb = threading.Thread(target=lambda: c.get_or_compute("b", loader_b))
++        tb.start()
++        tb.join(5)  # would hang if "b" were blocked behind "a"
++        self.assertFalse(tb.is_alive())
++        self.assertIn(("end", "b"), order)
++        self.assertNotIn(("end", "a"), order)  # "a" still blocked on its gate
++        gate_a.set()
++        ta.join()
++
++    def test_error_propagates_to_all_and_not_cached(self):
++        gate = threading.Event()
++        c = TTLCache(60)
++        attempts = []
++
++        def boom():
++            attempts.append(1)
++            gate.wait(5)
++            raise ValueError("boom")
++
++        results = []
++
++        def runner():
++            try:
++                results.append(c.get_or_compute("k", boom))
++            except ValueError as e:
++                results.append(e)
++
++        threads = [threading.Thread(target=runner) for _ in range(5)]
++        for t in threads:
++            t.start()
++        gate.wait(0.2)
++        gate.set()
++        for t in threads:
++            t.join()
++
++        self.assertEqual(len(attempts), 1)
++        self.assertEqual(len(results), 5)
++        self.assertTrue(all(isinstance(r, ValueError) and str(r) == "boom" for r in results))
++        # Nothing cached: next call tries again (and this time succeeds).
++        self.assertEqual(c.get_or_compute("k", lambda: "recovered"), "recovered")
++
++    def test_expiry_uses_injected_clock(self):
++        now = [1000.0]
++        c = TTLCache(10, clock=lambda: now[0])
++        calls = []
++        self.assertEqual(c.get_or_compute("k", lambda: calls.append(1) or 1), 1)
++        now[0] = 1009.999
++        self.assertEqual(c.get_or_compute("k", lambda: calls.append(1) or 2), 1)
++        self.assertEqual(len(calls), 1)
++        self.assertEqual(len(c), 1)
++        now[0] = 1010.001  # strictly after expiry -> recomputed
++        self.assertEqual(c.get_or_compute("k", lambda: calls.append(1) or 2), 2)
++        self.assertEqual(len(calls), 2)
++        self.assertEqual(len(c), 1)
++
++    def test_len_counts_only_non_expired(self):
++        now = [0.0]
++        c = TTLCache(5, clock=lambda: now[0])
++        c.get_or_compute("a", lambda: 1)
++        c.get_or_compute("b", lambda: 2)
++        self.assertEqual(len(c), 2)
++        now[0] = 5.001
++        self.assertEqual(len(c), 0)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git c/ttlcache.py i/ttlcache.py
+index c1174d8..c75ffea 100644
+--- c/ttlcache.py
++++ i/ttlcache.py
+@@ -1,18 +1,73 @@
++import threading
+ import time
+ 
+ 
++class _InFlight:
++    """State shared by everyone racing on the same key."""
++
++    __slots__ = ("event", "value", "error")
++
++    def __init__(self):
++        self.event = threading.Event()
++        self.value = None
++        self.error = None
++
++
+ class TTLCache:
+-    def __init__(self, ttl):
++    def __init__(self, ttl, clock=None):
+         self.ttl = ttl
+-        self._data = {}
++        self._clock = clock if clock is not None else time.monotonic
++        self._data = {}       # key -> (value, expiry)
++        self._inflight = {}   # key -> _InFlight
++        self._lock = threading.Lock()
+ 
+     def get_or_compute(self, key, fn):
+-        hit = self._data.get(key)
+-        if hit and hit[1] > time.time():
+-            return hit[0]
+-        value = fn()
+-        self._data[key] = (value, time.time() + self.ttl)
++        with self._lock:
++            now = self._clock()
++            hit = self._data.get(key)
++            if hit is not None and hit[1] > now:
++                return hit[0]
++            inflight = self._inflight.get(key)
++            if inflight is None:
++                inflight = _InFlight()
++                self._inflight[key] = inflight
++                leader = True
++            else:
++                leader = False
++
++        if not leader:
++            # Another caller is computing this key: wait for its result.
++            inflight.event.wait()
++            if inflight.error is not None:
++                raise inflight.error
++            return inflight.value
++
++        # Re-check: a previous computation may have finished while we
++        # were waiting to enter the lock.
++        with self._lock:
++            now = self._clock()
++            hit = self._data.get(key)
++            if hit is not None and hit[1] > now:
++                self._inflight.pop(key, None)
++                return hit[0]
++
++        try:
++            value = fn()
++        except BaseException as exc:
++            with self._lock:
++                self._inflight.pop(key, None)
++            inflight.error = exc
++            inflight.event.set()
++            raise
++
++        with self._lock:
++            self._data[key] = (value, self._clock() + self.ttl)
++            self._inflight.pop(key, None)
++        inflight.value = value
++        inflight.event.set()
+         return value
+ 
+     def __len__(self):
+-        return len(self._data)
++        now = self._clock()
++        with self._lock:
++            return sum(1 for value, expiry in self._data.values() if expiry > now)

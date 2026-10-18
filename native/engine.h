@@ -46,12 +46,14 @@ struct GenRequest {
     std::vector<std::string> stops;            // extra stop strings
     int32_t max_tokens = 32768;
     bool use_spec = true;
+    bool want_entropy = true;
     // called with each newly accepted token and its text piece; return false to stop
     std::function<bool(llama_token, const std::string &)> on_token;
 };
 
 struct GenResult {
     std::vector<llama_token> tokens;           // generated tokens (eog excluded)
+    std::vector<float> entropy;                // entropy (nats) of the target distribution per token
     std::string text;
     bool hit_eog = false;
     bool hit_stop = false;
@@ -147,7 +149,7 @@ private:
     uint32_t n_seq_max = 1;
     std::vector<llama_token> kv;     // seq 0 tokens
     std::vector<Checkpoint> ckpts;   // sorted by n_tokens
-    int max_ckpts = 32;
+    int max_ckpts = 16; // ~150 MB each for Qwen3.8-27B (recurrent state); LLAMA_NATIVE_MAX_CKPT overrides
     // branch
     llama_pos branch_pos = 0;
     bool branch_active = false;
