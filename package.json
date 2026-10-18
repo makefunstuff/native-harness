@@ -18,6 +18,7 @@
   ],
   "files": [
     "extensions",
+    "!extensions/*/bench",
     "experimental/llama-native/extension",
     "experimental/llama-native/configs",
     "README.md",

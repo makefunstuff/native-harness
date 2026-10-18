@@ -177,8 +177,8 @@ export class LoopGuard {
 // Phrases that announce an action the model is about to take.
 const INTENT = /\b(I'll|I will|I'm going to|I am going to|let me|let's|I need to|I should|next,? I|now I|I'm now going to|I now need to)\b/i;
 const LEAD = /^(\W*\b(now|next|okay|ok|great|good|alright|all right|first|then|so|and|finally|perfect|right)\b)*\W*$/i;
-// Closings that are not stalls: offers to the user, wrap-ups.
-const NOT_STALL = /\b(let me know|if you('d| would)? (like|want|need)|feel free|happy to|I'll (stop|leave|wait|keep it)|I will (stop|leave|wait)|should you|would you like|let me summari[sz]e)\b/i;
+// Closings that are not stalls: offers to the user, wrap-ups, waiting on something, negations.
+const NOT_STALL = /\b(let me know|if you('d| would)? (like|want|need|prefer|rather)|feel free|happy to|should you|would you like|let me summari[sz]e|I'll (stop|leave|wait|keep|watch|stay|report|relay|follow up|check back)|I will (stop|leave|wait|keep|watch|stay|report|relay)|let's (wait|see)|I'll (know|be)|next update|when|once|as soon as|until|unless|(I'll|I will|I should|I'm going to|I am going to) (not|never)|won't|shouldn't)\b/i;
 
 /** The announced action the text ends on ("I'll run the tests"), or undefined. */
 export function stallIntent(text: string): string | undefined {
@@ -186,6 +186,8 @@ export function stallIntent(text: string): string | undefined {
 	if (!t || t.endsWith("?")) return undefined;
 	// last sentence or line
 	const lastLine = t.split(/\n+/).pop()!.trim();
+	// a question to the user just before ("Which OS? I'll write it after.") is not a stall
+	if (lastLine.includes("?")) return undefined;
 	const sentences = lastLine.split(/(?<=[.!?])\s+(?=[A-Z])/);
 	const last = sentences[sentences.length - 1].trim();
 	if (!last || last.length > 300) return undefined;

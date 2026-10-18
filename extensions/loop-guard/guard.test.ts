@@ -93,6 +93,8 @@ test("stallIntent: catches announced actions", () => {
 		"I need to add the migration as well.",
 		"Found it.\n\nNext, I'll edit `cli.py` to add the flag…",
 		"**Let me check the config file.**",
+		"Let me check if the tests pass.",
+		"Let me fix the test that isn't passing.",
 	])
 		assert.ok(stallIntent(t), t);
 	assert.equal(stallIntent("Done. Now let me run the tests:"), "let me run the tests");
@@ -120,4 +122,17 @@ test("onFinal: at most two nudges per prompt", () => {
 	g.newPrompt();
 	assert.ok(g.onFinal("Let me run the tests."));
 	assert.match(g.onFinal("Let me check.")!.text, /ends with "Let me check" but you made no tool call/);
+});
+
+test("stallIntent: waiting, conditions, negations and questions are not stalls", () => {
+	for (const t of [
+		"The run is going. I'll report back when it finishes.",
+		"I'll run the final verification when bg_11 lands.",
+		"Which OS — X11 or Win32? I'll write it after.",
+		"I should not start that silently because it launches services.",
+		"Say go, or pick numbers. I'll build them once that agent finishes.",
+		"And I will not touch your relaunched app.",
+		"I'll watch the next update.",
+	])
+		assert.equal(stallIntent(t), undefined, t);
 });
