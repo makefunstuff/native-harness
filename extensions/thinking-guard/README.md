@@ -153,7 +153,9 @@ Raw rows: [`bench/results/`](bench/results/).
 
 ### Local 27B: pending
 
-To run once the router is free again, with no other campaign on it (shared-slot eviction made wall
+**Left pending by design:** the owner moved all local measurements to a separate task, HRN-13,
+which runs them once the HML-2 trial has given the GPUs and the router back. To run then, with no
+other campaign on the router (shared-slot eviction made wall
 times and cache numbers meaningless during this task):
 
 1. **Agent tickets**, `node bench/run.ts ARM --model llama.cpp/qwen3.8-27b` with three arms:
