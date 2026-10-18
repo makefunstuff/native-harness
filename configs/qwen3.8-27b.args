@@ -1,0 +1,38 @@
+# The router's [qwen3.8-27b] preset (homelab roles/local_ai/templates/models.ini.j2, 2026-10-14) as
+# llama-server arguments, plus the global flags the router passes to every model instance.
+# Used verbatim by both paths: scripts/baseline-server.sh (llama-server over HTTP) and the
+# llama-native pi extension (the same arguments parsed in-process by common_params_parse).
+# ${MODEL_DIR} defaults to /data/hfmodels/gguf; override it in the environment.
+--model ${MODEL_DIR}/quasar-qwen38-27b-nvfp4/Qwen3.8-27B-QUASAR-NVFP4-Q8emb.gguf
+--ctx-size 131072
+--device CUDA0,CUDA1
+--split-mode tensor
+--tensor-split 0.55,0.45
+--n-gpu-layers all
+--fit off
+--flash-attn on
+--spec-type draft-dflash,ngram-map-k4v
+--model-draft ${MODEL_DIR}/drafters/Qwen3.8-27B-DFlash2-Q4_K_M-ownhead.gguf
+--device-draft CUDA1
+--n-gpu-layers-draft all
+--spec-draft-n-max 7
+--reasoning auto
+--reasoning-effort medium
+--reasoning-budget -1
+--cache-type-k q8_0
+--cache-type-v q8_0
+--threads 12
+--parallel 1
+--cache-ram 8192
+--batch-size 512
+--ubatch-size 128
+--n-predict 32768
+--repeat-penalty 1.0
+--presence-penalty 0.0
+--min-p 0.0
+--top-p 0.95
+--top-k 20
+--temperature 1.0
+--kv-unified
+--context-shift
+--cache-idle-slots
