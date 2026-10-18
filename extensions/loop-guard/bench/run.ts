@@ -180,6 +180,7 @@ async function main() {
 				}
 				const wall_s = Math.round((Date.now() - t0) / 100) / 10;
 				const g = grade(job.ticket, work);
+				rmSync(work, { recursive: true, force: true });
 				const msgs = sessionMessages(sessDir);
 				const st = replay(sessionFiles([sessDir]), false).local;
 				const row = {
@@ -196,6 +197,7 @@ async function main() {
 					`${row.provider_error ? " PROVIDER-ERROR" : ""}${timedOut ? " TIMEOUT" : ""}`);
 			}
 	proxy?.close();
+	rmSync(agentDir, { recursive: true, force: true }); // the copy holds credentials (auth.json)
 }
 
 await main();
