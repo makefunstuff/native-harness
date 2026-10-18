@@ -9,7 +9,7 @@
 // Per run it records the hidden-test result (which hidden tests failed: the "untouched" ones are
 // the destructive-edit check) and, from the session, every edit call: errors (by kind), loose
 // placements and path repairs made by local-edit, and edits that removed non-blank lines without
-// putting them back (from pi's own diff, so both arms are measured the same way). It also counts
+// putting them back (no added line resembles them; from pi's own diff, so both arms are measured the same way). It also counts
 // "collateral" lines: lines the original and the reference solution share that the final tree lost.
 //
 // Runs on a copy of ~/.pi/agent (no sessions), refreshed per arm, so the real config is never
@@ -22,6 +22,7 @@ import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, readdirSync, 
 import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compactDiff } from "../diff.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXT = dirname(HERE);
@@ -98,17 +99,9 @@ export function collateral(task: string, work: string): number {
 	return lost;
 }
 
-/** Non-blank lines a successful edit removed and did not re-add (pi's display diff). */
+/** Non-blank lines a successful edit removed and did not put back, by local-edit's own measure (diff.ts). */
 export function diffDropped(diff: string | undefined): number {
-	const rem: string[] = [];
-	const add = new Set<string>();
-	for (const line of (diff ?? "").split("\n")) {
-		const m = /^([+-])\s*\d+ ?(.*)$/.exec(line);
-		if (!m) continue;
-		if (m[1] === "-") rem.push(norm(m[2]));
-		else add.add(norm(m[2]));
-	}
-	return rem.filter((r) => r && !add.has(r)).length;
+	return compactDiff(diff)?.dropped ?? 0;
 }
 
 export function classifyError(text: string): string {

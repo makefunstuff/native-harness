@@ -286,3 +286,9 @@ test("a one-line oldText with a literal \\n in a string is matched as written", 
 	const r = resolveEdits(src, [{ oldText: '    print("Grand totl:\\n", total_amount)', newText: '    print("Grand total:\\n", round(total_amount, 2))' }], "r.py");
 	assert.equal(src.replace(r.edits[0].oldText, r.edits[0].newText), 'def report(total_amount):\n    print("Grand total:\\n", round(total_amount, 2))\n');
 });
+
+test("compactDiff: a modified line is not counted as dropped", () => {
+	const d = compactDiff(["-3   standard: 24, reduced: [5, 9]", "-4   notes: \"rate table entry 8, updated 2026-01-01\"", "-5   x: 1", "+3   standard: 26, reduced: [5, 9]", "+4   notes: \"rate table entry 8, updated 2026-09-01\"", "+5   x: 2"].join("\n"))!;
+	assert.equal(d.dropped, 0);
+	assert.doesNotMatch(d.text, /Warning/);
+});

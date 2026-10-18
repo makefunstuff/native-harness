@@ -3,11 +3,15 @@
 //
 // Input is pi's display diff (details.diff of the edit tool): "+NN text", "-NN text", " NN text"
 // and " ... " gap markers. Output keeps one line of context around each change, caps the length,
-// and warns when non-blank lines were removed without coming back, or newText looks abbreviated.
+// and warns when non-blank lines were removed without coming back (no added line resembles them),
+// or newText looks abbreviated.
+
+import { similarity } from "./match.ts";
 
 const CONTEXT = 1;
 const MAX_LINES = 60;
 const DROP_WARN = 3; // removed non-blank lines not re-added before warning
+const SIMILAR = 0.6; // an added line this similar to a removed one is the same line, modified
 // newText that stands in for code instead of containing it ("// ... rest unchanged")
 const PLACEHOLDER = /(\/\/|#|\/\*|<!--|--)\s*(\.\.\.|…)|(\.\.\.|…)\s*(rest|existing|remaining|unchanged|same|other)|\b(rest of (the )?(code|file|function|method|class)|existing code|remains? unchanged|unchanged code)\b/i;
 
@@ -41,8 +45,12 @@ export function compactDiff(diff: string | undefined): DiffSummary | undefined {
 	const lines = parse(diff);
 	const removed = lines.filter((l) => l.kind === "-");
 	const added = lines.filter((l) => l.kind === "+");
-	const addedSet = new Set(added.map((l) => norm(l.body)));
-	const dropped = removed.filter((l) => norm(l.body) && !addedSet.has(norm(l.body))).length;
+	// a removed line is "dropped" when no added line resembles it (a modified line is not dropped)
+	const addedNorm = added.map((l) => norm(l.body));
+	const dropped = removed.filter((l) => {
+		const b = norm(l.body);
+		return b && !addedNorm.some((a) => a === b || similarity(a, b, SIMILAR) >= SIMILAR);
+	}).length;
 	const placeholder = added.some((l) => PLACEHOLDER.test(l.body)) && !removed.some((l) => PLACEHOLDER.test(l.body));
 	const keep = lines.map(() => false);
 	lines.forEach((l, i) => {
