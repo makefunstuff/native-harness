@@ -131,6 +131,14 @@ common_chat_templates_inputs Service::inputs(const std::vector<common_chat_msg> 
             in.chat_template_kwargs["reasoning_effort"] = ojson(e).dump();
         }
     }
+    // as the server does: an "enable_thinking" template kwarg switches thinking for this request
+    {
+        auto it = in.chat_template_kwargs.find("enable_thinking");
+        if (it != in.chat_template_kwargs.end()) {
+            if (it->second == "false") in.enable_thinking = false;
+            else if (it->second == "true") in.enable_thinking = true;
+        }
+    }
     if (req.contains("enable_thinking") && req["enable_thinking"].is_boolean()) {
         in.enable_thinking = req["enable_thinking"].get<bool>();
     }

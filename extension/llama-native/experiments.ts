@@ -17,6 +17,9 @@
 //   branch-compact  `session_before_compact` hook (native): write the summary on a fork of the
 //                   cached conversation instead of a fresh request that re-reads it all
 //   helper-compact  same, written by the helper model from the serialised conversation
+//   think-route     `before_provider_request` hook: after tool results, a logprob decision (native
+//                   branch / HTTP 1-token request) on whether the next step is routine; if so the
+//                   request runs with thinking off (chat_template_kwargs.enable_thinking = false)
 //
 // The helper model (LLAMA_NATIVE_HELPER_ARGS, an argument file) is a second model in the same
 // process, e.g. a 2B model on one GPU next to the 27B.
@@ -47,6 +50,10 @@ export const DONE_QUESTION =
 	"A) The task is complete and verified: the tests (or another check) were run after the last change and pass.\n" +
 	"B) Something is missing or unverified, or the last change was not tested.\n" +
 	"Answer with A or B.";
+export const ROUTE_QUESTION =
+	"Look at the latest tool results. Is the next step routine, so you can act right away without " +
+	"deliberating (for example: run the tests, read the next file, apply an obvious fix), or does it need " +
+	"careful thinking first?\nA) routine, act now\nB) needs careful thinking\nAnswer with A or B.";
 export const DONE_NUDGE =
 	"Not done yet: verify the work before you stop. Run the tests or otherwise check the result after your " +
 	"last change, fix anything missing or failing, then finish with a short summary.";
@@ -139,9 +146,32 @@ export function installExperiments(pi: ExtensionAPI, native: () => Promise<Nativ
 	let nudges = 0;
 	const elided = new Set<string>();
 
-	pi.on("before_provider_request", (event: any) => {
+	pi.on("before_provider_request", async (event: any, ctx: any) => {
 		const p = event.payload;
-		if (p && Array.isArray(p.messages)) lastPayload = p;
+		if (!p || !Array.isArray(p.messages)) return;
+		lastPayload = p;
+		if (!E.has("think-route")) return;
+		const last = p.messages[p.messages.length - 1];
+		if (last?.role !== "tool") return;
+		let r: any;
+		let via: string;
+		try {
+			if (ctx.model?.provider === "llama-native") {
+				r = await (await native()).decide({ messages: p.messages, tools: p.tools, chat_template_kwargs: p.chat_template_kwargs,
+					question: ROUTE_QUESTION, labels: ["A", "B"] });
+				via = "native-branch";
+			} else {
+				r = await httpDecide(ctx.model, p, p.messages, ROUTE_QUESTION, ["A", "B"]);
+				via = "http-logprobs";
+			}
+		} catch (e: any) {
+			logMetrics({ kind: "decide", what: "route", error: String(e?.message ?? e) });
+			return;
+		}
+		const routine = (r.probs?.[0] ?? 0) > 0.5;
+		logMetrics({ kind: "decide", what: "route", via, p_routine: r.probs?.[0], skip_thinking: routine, timings: r.timings, mass: r.mass });
+		if (!routine) return;
+		return { ...p, chat_template_kwargs: { ...(p.chat_template_kwargs ?? {}), enable_thinking: false } };
 	});
 	pi.on("message_end", (event: any) => {
 		if (event.message?.role === "assistant") lastAssistant = event.message;
@@ -239,7 +269,7 @@ export function installExperiments(pi: ExtensionAPI, native: () => Promise<Nativ
 				return;
 			}
 			const notDone = (r.probs?.[1] ?? 0) > 0.5;
-			logMetrics({ kind: "decide", via, p_done: r.probs?.[0], nudge: notDone, timings: r.timings, mass: r.mass });
+			logMetrics({ kind: "decide", what: "done", via, p_done: r.probs?.[0], nudge: notDone, timings: r.timings, mass: r.mass });
 			if (!notDone) return;
 			nudges++;
 			return {
