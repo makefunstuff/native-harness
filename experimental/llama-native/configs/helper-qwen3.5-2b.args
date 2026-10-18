@@ -1,7 +1,7 @@
 # Helper model for the multi-model experiments: unsloth/Qwen3.5-2B-GGUF Q4_K_M (Apache-2.0,
 # revision f6d5376be1edb4d416d56da11e5397a961aca8ae), loaded next to the 27B in the same process.
 # CUDA0 holds the smaller share of the 27B (tensor split 0.55/0.45 with the drafter on CUDA1).
-# ${HELPER_DIR} defaults to ~/.cache/native-harness/models.
+# ${HELPER_DIR} defaults to ~/.cache/pi-extras/llama-native/models.
 --model ${HELPER_DIR}/Qwen3.5-2B-Q4_K_M.gguf
 --device CUDA0
 --n-gpu-layers all

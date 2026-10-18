@@ -11,8 +11,8 @@ import argparse, json, os, random, shutil, subprocess, sys, threading, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 RAW = os.path.join(REPO, "results", "raw", "longctx")
-RUN = os.path.expanduser("~/.cache/native-harness/run")
-WORK = os.path.expanduser("~/.cache/native-harness/work/longctx")
+RUN = os.path.expanduser("~/.cache/pi-extras/llama-native/run")
+WORK = os.path.expanduser("~/.cache/pi-extras/llama-native/work/longctx")
 
 PROMPTS = [
     "Read docs/design.md completely with the read tool (continue with offset when it is truncated). "
@@ -120,7 +120,7 @@ def main():
         os.remove(metrics)
     for base in ("proxy.jsonl", "native.jsonl"):
         open(os.path.join(RUN, base + ".target"), "w").write(metrics)
-    sess = os.path.join(os.path.expanduser("~/.cache/native-harness/sessions/longctx"), name + ".session")
+    sess = os.path.join(os.path.expanduser("~/.cache/pi-extras/llama-native/sessions/longctx"), name + ".session")
     shutil.rmtree(sess, ignore_errors=True)
     os.makedirs(sess)
     env = dict(os.environ, LLAMA_NATIVE_METRICS=os.path.join(RUN, "native.jsonl"), LLAMA_NATIVE_EXP=a.exp)

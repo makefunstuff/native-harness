@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop the baseline llama-server and proxy started by baseline-up.sh.
-RUN=${RUN_DIR:-$HOME/.cache/native-harness/run}
+RUN=${RUN_DIR:-$HOME/.cache/pi-extras/llama-native/run}
 for f in server proxy; do
   [ -f "$RUN/$f.pid" ] && kill "$(cat "$RUN/$f.pid")" 2>/dev/null && echo "stopped $f"
   rm -f "$RUN/$f.pid"

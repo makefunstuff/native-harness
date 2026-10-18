@@ -21,7 +21,7 @@ Harness: the human's pi 1.3.0 with its full configuration (tools incl. codemode,
 extensions, skills, MCP), run on a copy of `~/.pi/agent`.
 - Baseline `http`: pi's `llama.cpp` provider → our own llama-server on loopback.
 - In-process `native`: pi's `llama-native` provider, the same OpenAI-completions client with an
-  in-process `fetch` → Node-API binding of libllama (`native/`, `extension/llama-native/`).
+  in-process `fetch` → Node-API binding of libllama (`native/`, `extension/`).
 
 Tickets: the six from homelab `evals/agentic-glimmer-2026-10-14` plus a 12-module API rename,
 graded by hidden tests, `:medium` thinking. Raw data: `results/raw/*.jsonl` and `results/raw-artifacts.tar.xz`, tables:
@@ -86,7 +86,7 @@ bookkeeping; plus a model load per pi process.
 | context-edit micro-benchmark | 1 per path | **Small win for in-process edits, capped by the model** — see below |
 | done-check decision (`agent_before_settle`) | 7 http | **No effect:** the model rated its own work "done and verified" at p ≥ 0.994 every time, including on a failed ticket, so it never nudged. Each decision cost ~0.4 s over HTTP (76 new tokens; the prefix came from the cache). Not run in-process. |
 | entropy as an uncertainty trigger | 476 turns, 48 native runs | **No signal:** entropy of the tool-call part does not predict a failing tool result (ROC AUC 0.52); whole-turn entropy is weak (0.61). Per task it does not predict a failed ticket (0.37-0.63, 6 failures). Forks for "hard steps" were not built on it. |
-| helper model (`helper-decide`, `helper-compact`), `think-route`, compaction on a fork (`branch-compact`), long-context session, "HTTP done well" ticket arm | 0 | **Not run** (stopped). The code is in place: `extension/llama-native/experiments.ts`, `bench/longctx.py`, `bench/matrix2.sh`. |
+| helper model (`helper-decide`, `helper-compact`), `think-route`, compaction on a fork (`branch-compact`), long-context session, "HTTP done well" ticket arm | 0 | **Not run** (stopped). The code is in place: `extension/experiments.ts`, `bench/longctx.py`, `bench/matrix2.sh`. |
 
 ### Context-edit micro-benchmark (`bench/edit-microbench.mjs`, `results/microbench/`)
 
@@ -145,7 +145,7 @@ recomputation), long sessions that compact, or several requests that share a cac
    at every message boundary as a server option, and a "fork this slot for one request" mode for
    decisions and summaries. That brings the edit and fork gains to every client, with no
    per-process model load and no second copy of the cache logic.
-3. **Otherwise, stop here.** Keep `extension/llama-native` as an optional in-process model for
+3. **Otherwise, stop here.** Keep `experimental/llama-native/extension` as an optional in-process model for
    offline or single-user use. Fix its per-turn overhead first: cache the per-message renders,
    checkpoint only before tool results.
 

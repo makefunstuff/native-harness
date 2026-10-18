@@ -1,4 +1,4 @@
-// llama-native: llama.cpp inside pi's own process.
+// llama-native provider, loaded by index.ts once the addon is built.
 //
 // Registers provider "llama-native". Its models use pi's built-in OpenAI-completions client
 // unchanged (message conversion, tool parsing, thinking, usage, retries, abort), but the client's
@@ -7,14 +7,16 @@
 // and what runs behind it differ.
 //
 // Configuration (environment):
-//   LLAMA_NATIVE_ARGS     llama-server style argument file (default: ../../configs/qwen3.8-27b.args)
-//   LLAMA_NATIVE_ADDON    path of llama_native.node (default: ../../native/build/llama_native.node)
+//   LLAMA_NATIVE_ARGS     llama-server style argument file (default: ../configs/qwen3.8-27b.args)
+//   LLAMA_NATIVE_ADDON    path of llama_native.node (default: ../native/build/llama_native.node)
 //   LLAMA_NATIVE_MODEL    model id to mirror from the llama.cpp provider in models.json (default qwen3.8-27b)
 //   LLAMA_NATIVE_EXP      comma-separated experiments, see experiments.ts
 //   LLAMA_NATIVE_METRICS  JSONL file for per-request metrics (or a file named in "<path>.target")
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+// "/compat" is what pi maps the bare pi-ai specifier to for extensions, and a public export of the
+// package, so it resolves both inside pi (git installs have no node_modules) and in unit tests.
+import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/compat";
+import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -141,14 +143,13 @@ async function nativeFetch(input: any, init?: any): Promise<Response> {
 }
 
 function argsFile(): string {
-	return process.env.LLAMA_NATIVE_ARGS ?? resolve(HERE, "../../configs/qwen3.8-27b.args");
+	return process.env.LLAMA_NATIVE_ARGS ?? resolve(HERE, "../configs/qwen3.8-27b.args");
 }
-function addonPath(): string {
-	return process.env.LLAMA_NATIVE_ADDON ?? resolve(HERE, "../../native/build/llama_native.node");
+export function addonPath(): string {
+	return process.env.LLAMA_NATIVE_ADDON ?? resolve(HERE, "../native/build/llama_native.node");
 }
 
-export default function (pi: ExtensionAPI) {
-	if (!existsSync(addonPath())) return; // not built: stay out of the way
+export function install(pi: ExtensionAPI) {
 	const modelId = process.env.LLAMA_NATIVE_MODEL ?? "qwen3.8-27b";
 	pi.registerProvider(PROVIDER, {
 		baseUrl: BASE_URL,

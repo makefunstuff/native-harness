@@ -1,10 +1,10 @@
 // Read a llama-server argument file: one "--flag value" per line, # comments, ${VAR} expansion
-// (defaults: MODEL_DIR=/data/hfmodels/gguf, HELPER_DIR=~/.cache/native-harness/models).
+// (defaults: MODEL_DIR=/data/hfmodels/gguf, HELPER_DIR=~/.cache/pi-extras/llama-native/models).
 const { readFileSync } = require("node:fs");
 const DEFAULTS = {
   MODEL_DIR: "/data/hfmodels/gguf",
-  SLOT_DIR: require("node:path").join(require("node:os").homedir(), ".cache/native-harness/slots"),
-  HELPER_DIR: require("node:path").join(require("node:os").homedir(), ".cache/native-harness/models"),
+  SLOT_DIR: require("node:path").join(require("node:os").homedir(), ".cache/pi-extras/llama-native/slots"),
+  HELPER_DIR: require("node:path").join(require("node:os").homedir(), ".cache/pi-extras/llama-native/models"),
 };
 function readArgs(file, env = process.env) {
   const out = [];

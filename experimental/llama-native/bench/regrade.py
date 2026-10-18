@@ -11,7 +11,7 @@ import glob, json, os, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(os.path.dirname(HERE), "results", "raw")
-TMP = os.path.expanduser("~/.cache/native-harness/tmp")
+TMP = os.path.expanduser("~/.cache/pi-extras/llama-native/tmp")
 pat = sys.argv[1] if len(sys.argv) > 1 else "No space left"
 os.makedirs(TMP, exist_ok=True)
 env = dict(os.environ, TMPDIR=TMP)

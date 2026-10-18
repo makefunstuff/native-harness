@@ -44,7 +44,7 @@ def main():
             r = json.loads(line)
             name = f"{r['task']}-r{r['round']}"
             mfile = os.path.join(RAW, arm, name + ".metrics.jsonl")
-            sdir = os.path.join(os.path.expanduser("~/.cache/native-harness/sessions"), arm, name + ".session")
+            sdir = os.path.join(os.path.expanduser("~/.cache/pi-extras/llama-native/sessions"), arm, name + ".session")
             if not os.path.exists(mfile):
                 continue
             reqs = [json.loads(l) for l in open(mfile)]

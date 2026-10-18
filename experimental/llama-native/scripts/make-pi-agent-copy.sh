@@ -3,10 +3,10 @@
 # real directory is edited. Sessions are not copied. In the copy only two things change:
 #   - the llama.cpp provider points at our own llama-server (BASELINE_URL) instead of the router;
 #   - the llama-native extension from this repo is linked into extensions/.
-# Usage: scripts/make-pi-agent-copy.sh [DEST]   (default ~/.cache/native-harness/pi-agent)
+# Usage: scripts/make-pi-agent-copy.sh [DEST]   (default ~/.cache/pi-extras/llama-native/pi-agent)
 set -euo pipefail
 SRC=${PI_AGENT_SRC:-$HOME/.pi/agent}
-DEST=${1:-$HOME/.cache/native-harness/pi-agent}
+DEST=${1:-$HOME/.cache/pi-extras/llama-native/pi-agent}
 BASELINE_URL=${BASELINE_URL:-http://127.0.0.1:18181}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$DEST"
@@ -24,5 +24,5 @@ if "llama.cpp" in a:
     a["llama.cpp"].setdefault("env", {})["LLAMA_BASE_URL"] = url
 json.dump(a, open(p, "w"), indent=2)
 PY
-ln -sfn "$REPO/extension/llama-native" "$DEST/extensions/llama-native"
+ln -sfn "$REPO/extension" "$DEST/extensions/llama-native"
 echo "pi agent copy: $DEST (llama.cpp -> $BASELINE_URL, llama-native linked)"

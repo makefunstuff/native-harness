@@ -11,7 +11,7 @@
 // append). max_tokens 1, thinking off: only prompt processing is measured.
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const { readArgs } = require("../extension/llama-native/args.cjs");
+const { readArgs } = require("../extension/args.cjs");
 
 const mode = process.argv[2];
 const url = process.argv[3];

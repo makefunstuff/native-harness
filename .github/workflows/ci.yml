@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # no ~/.pi/agent on the runner: the smoke test runs pi on an empty config
+      - run: scripts/check.sh
+        env:
+          PI_EXTRAS_SMOKE_CONFIG: empty
