@@ -122,14 +122,14 @@ did not ask to change was changed or removed (the destructive-edit check). Each 
 | arm | runs | hidden tests pass | edit calls | edit errors | placed loosely | untouched-code check failed | edits dropping ≥ 3 lines |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | base (pi's edit) | 18 | 18/18 | 30 | 1 (3.3 %) | – | 0/18 | 3 |
-| local-edit | 18 | 18/18 | 29 | 0 | 0 | 0/18 | 2 |
+| local-edit | 18 | 18/18 | 26 | 0 | 0 | 0/18 | 0 |
 
 What this shows:
 - **No regression.** Pass rate, edit counts and wall time (median 11 s vs 12 s) are the same.
 - **The bench cannot tell the arms apart on errors.** DeepSeek Flash almost never misses an edit.
   The one baseline error was malformed JSON arguments, which pi rejects before any edit code runs,
   so it says nothing about either arm.
-- **The 3+-line drops were not destroyed code.** I read all five: each is a deliberate rewrite
+- **The 3+-line drops were not destroyed code.** I read all three (all in the base arm): each is a deliberate rewrite
   of the model's own test.
 - **Claude was not measured.** In the first version of this bench, Claude Sonnet 5.5 made no
   `edit` calls at all (it edits through bash scripts), so it was left out.
@@ -164,6 +164,14 @@ The search runs synchronously inside pi, so it is bounded:
   out counts as a possible rival, so the edit is refused, never guessed.
 - **Size limits:** an `oldText` over 20,000 characters is not placed loosely. Candidates over
   2,500 characters show the bigram score.
+- **One-line `oldText`:**
+  - Lines are first filtered by bigram containment, in one linear pass. A match ≥ 95 % similar
+    keeps at least 90 % of the pattern's bigrams, so nothing that could match is dropped.
+  - The lines left get Ukkonen's cut-off check, about k·|line| cells with k = 5 % of the pattern,
+    within a budget of 6·10⁷ cells.
+  - The full quadratic substring search runs only on lines that pass that check (at most two).
+  - Lines the budget could not check are reported as "too much alike to tell apart quickly", and
+    the edit is refused.
 
 Timings:
 - A 300-line stale `oldText` against a 3,000-line file: 37.6 s before this bound, **32 ms**
@@ -171,6 +179,10 @@ Timings:
 - A 500-line one against 2,000 lines: 98 s before, 7 ms after.
 - A 300-line block with one typo is still placed, in 0.44 s.
 - The worst case found, a 360-line near-miss in a 4,000-line file of repeated lines, takes 0.3 s.
+- One-line misses in files of long, alike lines take 14–144 ms (they took 1–25 s before this bound):
+  - a stale 977-character record in a 3,000-line JSONL file: 107 ms through `tool.execute`;
+  - a 1,995-character line against 2,000 alike lines: 144 ms;
+  - a CSV-like row against 5,000 long rows: 75 ms.
 - `index.test.ts` checks these bounds.
 
 ### Homelab evals: not run

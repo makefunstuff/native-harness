@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { fakeCtx, fakePi } from "../../test/lib/fake-pi.ts";
 import { compactDiff } from "./diff.ts";
 import extension, { repairArguments } from "./index.ts";
-import { EditMatchError, bestSubstring, merge3, reindent, resolveEdits, similarity, unescapeLiteral } from "./match.ts";
+import { EditMatchError, bestSubstring, merge3, reindent, resolveEdits, similarity, unescapeLiteral, withinK } from "./match.ts";
 import { resolveEditPath, strippedVariants } from "./paths.ts";
 
 const PY = `import os
@@ -314,4 +314,31 @@ test("a near match of a block that appears twice is refused, each place listed o
 	const filler = (k: string) => Array.from({ length: 50 }, (_, i) => `    ${k}_${i}();`);
 	const file = [...filler("a"), ...block, ...filler("b"), ...block, ...filler("c")].join("\n");
 	assert.throws(() => resolveEdits(file, [{ oldText: block.join("\n").replace("do_thing(3)", "do_thng(3)"), newText: "x" }], "f.ts"), /several places \(lines 51, 121\)/);
+});
+
+test("withinK agrees with the full substring search", () => {
+	let seed = 7;
+	const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+	const str = (n: number) => Array.from({ length: n }, () => "abcd"[Math.floor(rnd() * 4)]).join("");
+	for (let t = 0; t < 300; t++) {
+		const text = str(5 + Math.floor(rnd() * 60));
+		const pat = str(1 + Math.floor(rnd() * 20));
+		const k = Math.floor(rnd() * 5);
+		const d = Math.round((1 - bestSubstring(text, pat).ratio) * pat.length);
+		assert.equal(withinK(text, pat, k), d <= k ? d : k + 1, `${text} / ${pat} / k=${k}`);
+	}
+});
+
+test("a stale one-line oldText in a file of long, alike lines fails fast", () => {
+	const rec = (i: number, pad: number) => JSON.stringify({ id: i, user: `user-${i % 97}`, event: ["click", "view", "buy"][i % 3], value: (i * 37) % 1000, payload: "p".repeat(pad) + (i % 13) });
+	for (const [n, pad] of [[3000, 900], [5000, 200]]) {
+		const lines = Array.from({ length: n }, (_, i) => rec(i, pad));
+		const t = Date.now();
+		assert.throws(() => resolveEdits(lines.join("\n"), [{ oldText: rec(9_999_999, pad).replace("user", "usr"), newText: "{}" }], "e.jsonl"));
+		assert.ok(Date.now() - t < 2000, `${n} lines of ${lines[0].length} chars: ${Date.now() - t} ms`);
+	}
+	const long = Array.from({ length: 2000 }, (_, i) => "abcdefghij".repeat(199) + String(i).padStart(5, "0"));
+	const t = Date.now();
+	assert.throws(() => resolveEdits(long.join("\n"), [{ oldText: "abcdefghij".repeat(199) + "zzzzz", newText: "x" }], "f"));
+	assert.ok(Date.now() - t < 2000, `2000 lines of 1995 chars: ${Date.now() - t} ms`);
 });

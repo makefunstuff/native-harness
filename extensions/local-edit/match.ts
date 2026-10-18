@@ -256,6 +256,37 @@ function mergeStale(oldLines: string[], win: string[], winStart: number, newText
 	return { newText: newLines.join("\n"), kept };
 }
 
+/**
+ * Smallest edit distance of `pattern` to any substring of `text`, if it is at most `k`
+ * (else k + 1). Ukkonen's cut-off: only rows that can still stay within k are computed, so a
+ * line costs about k·|text| cells instead of |pattern|·|text|.
+ */
+export function withinK(text: string, pattern: string, k: number): number {
+	const m = pattern.length;
+	if (m === 0) return 0;
+	const C = new Int32Array(m + 1);
+	for (let i = 0; i <= m; i++) C[i] = i;
+	let lact = Math.min(k, m); // last row whose value is ≤ k
+	let best = lact === m ? C[m] : k + 1;
+	for (let j = 0; j < text.length; j++) {
+		const tc = text.charCodeAt(j);
+		let diag = 0; // the previous column's C[0] (a match may start anywhere)
+		const top = Math.min(m, lact + 1);
+		for (let i = 1; i <= top; i++) {
+			const old = C[i];
+			const v = Math.min(diag + (pattern.charCodeAt(i - 1) === tc ? 0 : 1), old + 1, C[i - 1] + 1);
+			diag = old;
+			C[i] = v;
+		}
+		let l = top;
+		while (l > 0 && C[l] > k) l--;
+		for (let i = l + 1; i <= top; i++) C[i] = k + 1; // rows past the cut-off are > k
+		lact = l;
+		if (lact === m && C[m] < best) best = C[m];
+	}
+	return best;
+}
+
 interface Window {
 	start: number; // 0-based first line
 	size: number; // number of lines
@@ -330,16 +361,33 @@ function bigrams(line: string): number[] {
 	return out;
 }
 
-/** Share of the bigrams of `pat` that `text` also has (1 = all of them). */
-export function containment(text: string, pat: string): number {
+/** Share of the bigrams of `pat` each line also has (1 = all of them), in one pass with a shared buffer. */
+export function containmentAll(lines: string[], pat: string): Float64Array {
 	const p = bigrams(pat);
-	if (!p.length) return text.includes(pat) ? 1 : 0;
+	const out = new Float64Array(lines.length);
 	const have = new Int32Array(BUCKETS);
-	for (const g of bigrams(text)) have[g]++;
-	let inter = 0;
-	for (const g of p) if (have[g]-- > 0) inter++;
-	return inter / p.length;
+	for (let i = 0; i < lines.length; i++) {
+		const gs = bigrams(lines[i]);
+		if (!p.length) {
+			out[i] = lines[i].includes(pat) ? 1 : 0;
+			continue;
+		}
+		for (const g of gs) have[g]++;
+		let inter = 0;
+		for (const g of p) if (have[g]-- > 0) inter++;
+		out[i] = inter / p.length;
+		have.fill(0); // cheaper than undoing per bigram for long lines; BUCKETS is small
+	}
+	return out;
 }
+
+// One-line search bounds: the substring search is quadratic, so it runs on the best-ranked lines
+// only, within a total budget of cells.
+const LINE_TOP = 8; // lines that get the full substring search (for the candidate list)
+const LINE_BUDGET = 3e7; // cells for the full substring searches
+const GATE_BUDGET = 6e7; // cells for the cut-off check of every line that could match
+// A one-line match ≥ 95 % similar keeps ≥ 90 % of the pattern's bigrams (an edit breaks at most two).
+const LINE_CONTAIN = 0.9;
 
 /**
  * Bigram Dice score of every whole-line window of the given size against oldText, in one pass
@@ -471,16 +519,33 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 	if (n === 1) {
 		const pat = oldLines[0].trim();
 		if (pat.length >= 8) {
+			// rank lines by bigram containment; the quadratic substring search runs on the best few only,
+			// within a total budget. A line that could match but was not checked counts as a rival.
+			const contain = containmentAll(fileLines, pat);
+			const ranked = [...contain.keys()]
+				.filter((i) => contain[i] >= LINE_CONTAIN && fileLines[i].length >= pat.length * SIMILARITY - 2)
+				.sort((a, b) => contain[b] - contain[a]);
+			// every line that could match gets the cheap cut-off check; only lines that pass it get the
+			// full (quadratic) search, which also finds where the match starts
+			const k = Math.floor((1 - SIMILARITY) * pat.length);
 			const hits: Array<{ line: number; start: number; end: number; ratio: number }> = [];
-			for (let i = 0; i < fileLines.length; i++) {
-				const line = fileLines[i];
-				if (line.length < pat.length * SIMILARITY - 2) continue;
-				// ≥ 95 % similar keeps most bigrams; and bound the quadratic search on long lines
-				if (containment(line, pat) < 0.8 || line.length * pat.length > 4_000_000) continue;
-				const b = bestSubstring(line, pat);
+			let unchecked = 0;
+			let gate = GATE_BUDGET;
+			for (const i of ranked) {
+				const cost = (k + 2) * fileLines[i].length;
+				if (hits.length >= 2) break;
+				if (cost > gate) {
+					unchecked++;
+					continue;
+				}
+				gate -= cost;
+				if (withinK(fileLines[i], pat, k) > k) continue;
+				const b = bestSubstring(fileLines[i], pat);
 				if (b.ratio >= SIMILARITY) hits.push({ line: i, ...b });
 			}
 			if (hits.length > 1) return { ambiguous: hits.map((h) => h.line + 1) };
+			if (unchecked)
+				return { conflict: `${unchecked} lines of the file are too much alike to tell apart quickly${hits.length ? ` (line ${hits[0].line + 1} matches, but they could too)` : ""}; copy oldText exactly from the file` };
 			if (hits.length === 1) {
 				const h = hits[0];
 				const whole = h.start <= indentOf(fileLines[h.line]).length && h.end >= fileLines[h.line].trimEnd().length;
@@ -517,6 +582,12 @@ function tolerantFind(content: string, fileLines: string[], lineStart: number[],
 	return region(best.start, best.size, `${Math.round(best.score * 1000) / 10}% similar`);
 }
 
+/** Line numbers for a message: sorted, the first ten. */
+function listLines(xs: number[]): string {
+	const u = [...new Set(xs)].sort((a, b) => a - b);
+	return u.slice(0, 10).join(", ") + (u.length > 10 ? `, … (${u.length} places)` : "");
+}
+
 /** For a long oldText: where its first and last lines are in the file, when each is there once. */
 function anchorNote(fileLines: string[], oldLines: string[]): string {
 	const body = oldLines.filter((l) => l.trim());
@@ -542,14 +613,19 @@ export function closestCandidates(content: string, oldText: string, max = 3, con
 	let ws: Window[];
 	if (oldLines.length === 1) {
 		const pat = oldLines[0].trim();
-		// rank lines by bigram containment, then compute the exact score for the best few only
-		ws = fileLines
-			.map((l, i) => ({ start: i, size: 1, score: l.trim() && pat ? containment(l, pat) : 0 }))
+		// rank lines by bigram containment, then compute the exact score for the best few only,
+		// within the same total budget as the search
+		const contain = pat ? containmentAll(fileLines, pat) : new Float64Array(fileLines.length);
+		let budget = LINE_BUDGET;
+		ws = [...contain.keys()]
+			.map((i) => ({ start: i, size: 1, score: fileLines[i].trim() ? contain[i] : 0 }))
 			.sort((a, b) => b.score - a.score)
-			.slice(0, 20)
+			.slice(0, LINE_TOP)
 			.map((w) => {
 				const l = fileLines[w.start];
-				if (!l.trim() || !pat || l.length * pat.length > 4_000_000) return w;
+				const cost = 2 * l.length * pat.length;
+				if (!l.trim() || !pat || cost > budget) return w;
+				budget -= cost;
 				const b = bestSubstring(l, pat);
 				return { ...w, score: Math.max(b.ratio, similarity(norm(l), norm(pat), 0.3)) };
 			})
@@ -613,7 +689,7 @@ export function resolveEdits(content: string, edits: Edit[], path: string): Reso
 		}
 		if (pi.count > 1)
 			throw new EditMatchError(
-				`${label} matches ${pi.count} places in ${path} (lines ${pi.lines.join(", ")}). Add neighbouring lines to oldText so it matches only one.`,
+				`${label} matches ${pi.count} places in ${path} (lines ${listLines(pi.lines)}). Add neighbouring lines to oldText so it matches only one.`,
 			);
 		// 2. literal escapes
 		const unesc = unescapeLiteral(e.oldText);
@@ -635,7 +711,7 @@ export function resolveEdits(content: string, edits: Edit[], path: string): Reso
 			);
 		if (found && "ambiguous" in found)
 			throw new EditMatchError(
-				`${label} was not found exactly in ${path}, and similar text appears in several places (lines ${found.ambiguous.join(", ")}). ` +
+				`${label} was not found exactly in ${path}, and similar text appears in several places (lines ${listLines(found.ambiguous)}). ` +
 					`Add neighbouring lines to oldText so it matches only one.\n${closestCandidates(content, e.oldText)}`,
 			);
 		if (found) {
