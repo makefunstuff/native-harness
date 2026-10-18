@@ -5,10 +5,10 @@ Each ticket is a repo/ with one large module, an issue.md, and a hidden_test.py 
 requested behaviour AND that every function the ticket does not ask to change is still there,
 unchanged (AST-equal to the original): the "destructive edit" check.
 """
-import os, shutil, textwrap
+import os, shutil, sys, textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TASKS = os.path.join(HERE, "tasks")
+TASKS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "tasks")  # gen_tasks.py [OUT_DIR]
 
 GUARD = '''
 import ast, os, unittest
