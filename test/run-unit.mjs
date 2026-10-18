@@ -10,7 +10,8 @@ const roots = ["extensions", "templates", "experimental/llama-native/extension",
 const files = [];
 const walk = (dir) => {
 	for (const d of readdirSync(dir, { withFileTypes: true })) {
-		if (d.name === "node_modules" || d.name.startsWith(".")) continue;
+		// bench tickets hold fixture repos whose tests fail on purpose (verify-gate/bench/selftest.ts runs them)
+		if (d.name === "node_modules" || d.name === "tickets" || d.name.startsWith(".")) continue;
 		const p = join(dir, d.name);
 		if (d.isDirectory()) walk(p);
 		else if (/\.test\.(ts|mjs)$/.test(d.name)) files.push(p);

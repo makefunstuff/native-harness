@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 [ -x node_modules/.bin/pi ] || npm ci --ignore-scripts --no-audit --no-fund
 echo "== unit tests"; node test/run-unit.mjs
 echo "== smoke test (pi -p)"; node test/smoke.mjs
+echo "== verify-gate bench tickets (self-test)"; node extensions/verify-gate/bench/selftest.ts
 echo "== experimental/llama-native"
 if [ "${PI_EXTRAS_NATIVE_CHECK:-0}" = 1 ]; then experimental/llama-native/scripts/check.sh
 else experimental/llama-native/scripts/check.sh --no-build; fi

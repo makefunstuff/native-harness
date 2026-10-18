@@ -8,7 +8,7 @@ extension on or off on its own.
 
 | extension | what it does | status |
 |---|---|---|
-| _coming soon_ | the first extensions are being written | |
+| [`verify-gate`](extensions/verify-gate/README.md) | runs the project's check (`.pi/verify` or AGENTS.md) before the agent may finish after editing files; on failure the agent gets the output for another round (at most 2). Adds a prompt line: tests must not share assumptions with the code | stable |
 | [`llama-native`](experimental/llama-native/README.md) | runs llama.cpp inside pi's own process as a model provider (`llama-native/…`); needs a llama.cpp build and a native addon you compile, does nothing without it. Results: [RESULTS.md](experimental/llama-native/RESULTS.md) | **experimental** |
 
 Each extension lives in its own folder under `extensions/<name>/` with its own README;
