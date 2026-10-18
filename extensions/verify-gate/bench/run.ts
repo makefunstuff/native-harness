@@ -2,7 +2,7 @@
 // verify-gate benchmark: pi, driven in-process through its SDK (createAgentSession), works the
 // TypeScript tickets in bench/tickets with and without the extension; hidden tests grade the tree.
 //
-//   node bench/run.ts ARM --model PROVIDER/ID[:thinking] [--gate on|off|gate-only|rule-only]
+//   node bench/run.ts ARM --model PROVIDER/ID[:thinking] [--gate on|off|gate-only|rule-only] [--prompt plain|told]
 //                         [--rounds N] [--first-round K] [--tasks a,b] [--timeout SECONDS]
 //
 // Each arm runs on a fresh copy of ~/.pi/agent (PI_AGENT_SRC; sessions and backups left out), so
@@ -30,7 +30,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { readConfig, verifyGate } from "../index.ts";
-import { hidden, prepare, prompt, ticketNames, visible } from "./tickets.ts";
+import { type PromptStyle, hidden, prepare, prompt, ticketNames, visible } from "./tickets.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const RESULTS = join(HERE, "results");
@@ -114,7 +114,7 @@ export function sessionStats(entries: SessionEntry[]): Stats {
 	return st;
 }
 
-async function runOne(opts: { arm: string; agentDir: string; model: string; gate: string; timeoutS: number }, name: string, round: number) {
+async function runOne(opts: { arm: string; agentDir: string; model: string; gate: string; prompt: PromptStyle; timeoutS: number }, name: string, round: number) {
 	const run = `${name}-r${round}`;
 	const work = join(CACHE, "work", opts.arm, run);
 	const sessDir = join(CACHE, "sessions", opts.arm, run);
@@ -149,7 +149,7 @@ async function runOne(opts: { arm: string; agentDir: string; model: string; gate
 	}, opts.timeoutS * 1000);
 	try {
 		await session.bindExtensions({});
-		await session.prompt(prompt(name));
+		await session.prompt(prompt(name, opts.prompt));
 	} catch (e) {
 		error = String((e as Error)?.message ?? e);
 	} finally {
@@ -166,8 +166,10 @@ async function runOne(opts: { arm: string; agentDir: string; model: string; gate
 	const tail = hid.tail.slice(-300).replaceAll(work, ".").replaceAll(homedir(), "~");
 	rmSync(work, { recursive: true, force: true });
 	return {
-		arm: opts.arm, model: opts.model, gate: opts.gate, task: name, round, passed: hid.ok, visible_ok: vis.ok,
+		arm: opts.arm, model: opts.model, gate: opts.gate, prompt: opts.prompt, task: name, round, passed: hid.ok, visible_ok: vis.ok,
 		self_confirmed: vis.ok && !hid.ok, // own tests green, hidden tests red
+		// the model never answered (auth, quota, outage): not a model result, left out of the tables
+		provider_error: st.stop === "error" && st.output_tokens === 0 && st.tool_calls === 0,
 		wall_s: Math.round(wall * 10) / 10, timed_out: timedOut, error: error ?? null, ...st, hidden_tail: tail,
 	};
 }
@@ -178,6 +180,7 @@ async function main() {
 		options: {
 			model: { type: "string" },
 			gate: { type: "string", default: "on" },
+			prompt: { type: "string", default: "plain" },
 			rounds: { type: "string", default: "1" },
 			"first-round": { type: "string", default: "1" },
 			tasks: { type: "string", default: "" },
@@ -187,6 +190,7 @@ async function main() {
 	const arm = positionals[0];
 	if (!arm || !values.model) throw new Error("usage: run.ts ARM --model PROVIDER/ID[:thinking] [--gate on|off|gate-only|rule-only] …");
 	if (!["on", "off", "gate-only", "rule-only"].includes(values.gate!)) throw new Error(`bad --gate ${values.gate}`);
+	if (values.prompt !== "plain" && values.prompt !== "told") throw new Error(`bad --prompt ${values.prompt}`);
 	mkdirSync(RESULTS, { recursive: true });
 	process.env.TMPDIR = join(CACHE, "tmp");
 	mkdirSync(process.env.TMPDIR, { recursive: true });
@@ -199,7 +203,7 @@ async function main() {
 	for (let round = first; round < first + Number(values.rounds); round++) {
 		for (const name of tasks) {
 			if (done.has(`${name}#${round}`)) continue;
-			const r = await runOne({ arm, agentDir, model: values.model, gate: values.gate!, timeoutS: Number(values.timeout) }, name, round);
+			const r = await runOne({ arm, agentDir, model: values.model, gate: values.gate!, prompt: values.prompt as PromptStyle, timeoutS: Number(values.timeout) }, name, round);
 			appendFileSync(out, JSON.stringify(r) + "\n");
 			console.log(`${arm} ${name} r${round} ${r.passed ? "PASS" : "FAIL"} ${r.wall_s}s visible=${r.visible_ok ? "ok" : "fail"} ` +
 				`gate=${r.gate_checks}/${r.gate_rounds} turns=${r.assistant_turns} calls=${r.tool_calls}${r.timed_out ? " TIMEOUT" : ""}${r.error ? ` ERROR ${r.error}` : ""}`);

@@ -10,13 +10,21 @@ import { fileURLToPath } from "node:url";
 export const TICKETS = join(dirname(fileURLToPath(import.meta.url)), "tickets");
 export const CHECK = "node --test\n"; // the default project check, written to .pi/verify in every ticket repo
 
-export const PREAMBLE =
-	"You are working autonomously in this repository; nobody will answer questions. " +
-	"Read the code, make the change, run the tests, and stop when the work is done.\n\n";
-export const SUFFIX =
+// Two prompt styles. "plain" (the default) says nothing about running tests, as many real requests
+// do not: whether the agent runs the project's check before it stops is then up to it, and that is
+// what the gate is for. "told" asks for it explicitly (the first measurement used only this one).
+export type PromptStyle = "plain" | "told";
+export const PREAMBLE: Record<PromptStyle, string> = {
+	plain: "You are working autonomously in this repository; nobody will answer questions. Make the change and stop when the work is done.\n\n",
+	told:
+		"You are working autonomously in this repository; nobody will answer questions. " +
+		"Read the code, make the change, run the tests, and stop when the work is done.\n\n",
+};
+const TS_NOTE =
 	"\n\nThe code is TypeScript that Node runs directly (type stripping, no build step): use only erasable " +
 	"syntax (no enum, namespace or constructor parameter properties) and import local files with their .ts " +
-	"extension. Run the tests with: node --test\n";
+	"extension.";
+export const SUFFIX: Record<PromptStyle, string> = { plain: TS_NOTE + "\n", told: TS_NOTE + " Run the tests with: node --test\n" };
 
 export function ticketNames(): string[] {
 	return readdirSync(TICKETS, { withFileTypes: true })
@@ -25,8 +33,8 @@ export function ticketNames(): string[] {
 		.sort();
 }
 
-export function prompt(name: string): string {
-	return PREAMBLE + readFileSync(join(TICKETS, name, "issue.md"), "utf8").trimEnd() + SUFFIX;
+export function prompt(name: string, style: PromptStyle = "plain"): string {
+	return PREAMBLE[style] + readFileSync(join(TICKETS, name, "issue.md"), "utf8").trimEnd() + SUFFIX[style];
 }
 
 // A fresh git repository with the ticket's code (and optionally the reference solution on top).

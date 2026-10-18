@@ -70,54 +70,85 @@ The check gets `PI_VERIFY_GATE_ROUND` (0, 1, 2…) in its environment.
 
 ## Measured
 
-Bench: pi 1.3.0 driven in-process through its SDK (`bench/run.ts`). It runs on a copy of the
-owner's pi config: settings, models, global extensions, codemode and tool search, but no MCP.
-There are nine TypeScript tickets in `bench/tickets/`, each graded by hidden `node:test` tests the
-agent never sees. Every ticket repo has a `.pi/verify` file, so the gate checks the project's own
-check. That check is the agent's own tests, plus a changelog rule in the `duration` ticket
-(written in that repo's AGENTS.md). Both arms get the same repos; the "gate" arm loads
-verify-gate (the gate plus the prompt line). Three rounds per arm, run 2026-10-19
-(`bench/run-all.sh NAME MODEL 3`):
+### The bench
 
-| arm | runs | hidden tests pass | own check green, hidden tests red | gate sent the agent back | mean wall s | mean tool calls |
-|---|---|---|---|---|---|---|
-| claude-sonnet-5-5, no gate | 27 | 27/27 | 0 | – | 12.6 | 2.2 |
-| claude-sonnet-5-5, verify-gate | 27 | 27/27 | 0 | 0 of 27 checks failed | 12.6 | 2.3 |
-| deepseek-flash, no gate | 27 | 27/27 | 0 | – | 18.7 | 6.9 |
-| deepseek-flash, verify-gate | 27 | 26/27 | 1 (api-migration) | 0 of 27 checks failed | 20.1 | 7.1 |
+`bench/run.ts` drives pi 1.3.0 in-process through its SDK (`createAgentSession`). It runs on a
+copy of the owner's pi config: settings, models, global extensions, codemode and tool search, but
+no MCP. Both arms get the same ticket repos. The "gate" arm loads verify-gate (the gate plus the
+prompt line); the "base" arm does not. Every repo has a `.pi/verify` file, so the gate runs the
+project's own check: the agent's tests (`node --test`). The `duration` ticket's check also
+enforces a changelog rule that its `AGENTS.md` states.
 
-Full tables: [`bench/results/summary.md`](bench/results/summary.md).
+**Tickets: the homelab evals, as TypeScript.** The eleven tickets in `bench/tickets/` are
+TypeScript ports of the homelab coding evals, plus two of my own. Each is graded by hidden
+`node:test` tests the agent never sees:
 
-What this shows, and what it does not:
+| homelab eval | tickets |
+|---|---|
+| `evals/agentic-glimmer-2026-10-14`: the six agentic pi tickets, also used by the llama-native bench | `logstats`, `cli-json`, `config-rename`, `ttlcache`, `presets-ini` (the ambiguous `argv` is now spelled out), `sqlite-migration` (`node:sqlite`) |
+| `evals/local-ai-campaign-2026-09-08/capability-suite`: the three coding tasks of the local-vs-cloud comparison, single-shot there, agentic tickets here | `event-reconcile`, `schedule-repair`, `api-migration` |
+| new | `isoweek` (year-boundary dates, where tests easily share the code's mistake), `duration` (the project check also covers a changelog rule) |
 
-- **No gain on cloud models, which is expected.** Both cloud models always run the project's
-  check before they finish, so in 54 gated runs the check never failed and the gate never sent
-  an agent back. Its cost is one run of the check per prompt: +0 s on Claude, +1.4 s on
-  DeepSeek (within noise).
-- **The prompt line did not stop self-confirming tests.** The one miss in the gated runs was
-  DeepSeek on api-migration: its own tests passed, but `call(url, null)` sent 0 ms instead of the
-  default 30 000. Its tests had the same blind spot as its code. That is the failure this
-  extension targets, and the gate cannot catch it when the agent's own tests are green. One miss
-  in 27 runs, against 0 in 27 without the extension, is noise, not evidence of harm.
-- The gate is aimed at local models, which in the session analysis stop with "All done" more
-  often. That measurement is still pending (next section). The behaviour is covered by the unit
-  tests and by the smoke test (`verify-gate.smoke.mjs`): the check fails, the agent goes back,
-  history is only appended to, the check passes, and the run ends.
+The homelab harnesses themselves (Python, and single-shot model calls for the capability suite)
+are not run, by the owner's rule that pi-extras has no Python. The tickets carry over the same
+specs, and the same hidden tests or their equivalents.
+
+**Two prompt styles.**
+- `told` adds "run the tests … Run the tests with: node --test". That alone decides what the gate
+  can show: an agent told to run the check will run it.
+- `plain` (the default) says only "make the change and stop when the work is done", so running
+  the project's check before stopping is left to the agent. That is the case the gate is for.
+
+### Results (cloud), 2026-10-19
+
+Three rounds per arm, run one after the other with `bench/run-all.sh NAME MODEL 3 [plain|told]`:
+
+| model | prompt | runs per arm | hidden tests pass, base → gate | own check green, hidden red (gate arm) | project check red when the agent stopped (base arm) | gate sent the agent back | mean wall s, base → gate |
+|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | plain | 27 | 27 → 27 | 0 | 0 | 0 | 13.3 → 13.4 |
+| claude-sonnet-5-5 | told | 27 | 27 → 27 | 0 | 0 | 0 | 12.6 → 12.6 |
+| deepseek-flash | plain | 33 | 33 → 33 | 0 | 0 | 0 | 20.0 → 19.2 |
+| deepseek-flash | told | 33 | 33 → 32 | 1 | 0 | 0 | 19.1 → 20.8 |
+
+Claude has 27 runs per arm, not 33, because the Anthropic key in the pi config stopped working
+(`401 invalid x-api-key`) before its `presets-ini` and `sqlite-migration` runs. Those runs never
+reached the model, so the bench records them as provider errors and leaves them out. Full tables:
+[`bench/results/summary.md`](bench/results/summary.md).
+
+What this shows:
+
+- **Cloud models do not need the gate, even when nobody tells them to test.** In all 240 cloud
+  runs, the project's check was green when the agent stopped, in the base arms too. So the gate
+  had nothing to catch: none of its 120 checks failed, and it never sent an agent back. Its cost
+  is one run of the check per prompt, within noise.
+- **The prompt line did not stop the one self-confirming test.** DeepSeek on api-migration
+  (`told`, gate arm): its own tests passed, but `call(url, null)` sent 0 ms instead of the
+  default 30 000. That is the failure this extension targets, and a green check cannot catch it.
+  One miss in 33 against none in 33 is noise.
+- **The case the gate is built for has not been measured.** The local 27B stops with "All done"
+  and failing tests more often in the session analysis. Those runs are still to do (next section).
+  Until then, the mechanism is covered by the unit tests and the smoke test
+  (`verify-gate.smoke.mjs`): the check fails, the agent goes back, history is only appended to,
+  the check passes, and the run ends.
 
 ### Local 27B: pending
 
-No local numbers yet. The local runs were stopped on 2026-10-19 so they would not clash with the
-HML-2 Strata trial, which takes both GPUs and the router. Before that, the router was shared with
-three other benchmarks, and requests hit pi's 5-minute timeout, so no local run had finished. A
-separate task runs these after HML-2:
-
-1. `bench/run-all.sh local-27b llama.cpp/qwen3.8-27b:medium 3`: arms `local-27b-base` and
-   `local-27b-gate`, all 9 tickets, 3 rounds each (54 runs). Run it alone on the router, with no
-   other benchmark at the same time, so wall times and cache numbers mean something.
-2. In `bench/results/summary.md`, report the prompt-cache table: the share of prompt tokens read
-   from cache on the request right after a gate message, against all requests. This is the
-   check that the appended message keeps the hybrid model's cache.
-3. Put the rows into the table above, and update the reading.
+No local numbers yet.
+- **Why.** The first local runs shared the single-slot router with three other benchmarks; their
+  requests hit pi's 5-minute timeout and none finished. Then all local runs were stopped on
+  2026-10-19 for the HML-2 Strata trial, which needs both GPUs and the router. Local models stay
+  off until the owner allows them again.
+- **To do**, with nothing else on the router:
+  1. `bench/run-all.sh local-27b-plain llama.cpp/qwen3.8-27b:medium 3 plain`: arms
+     `local-27b-plain-base` and `-gate`, all 11 tickets, 3 rounds (66 runs).
+  2. `bench/run-all.sh local-27b-told llama.cpp/qwen3.8-27b:medium 3 told`: the same with the
+     `told` prompt (66 runs).
+  3. The prompt-cache table in `bench/results/summary.md`: the share of prompt tokens read from
+     cache on the request right after a gate message, against all requests. This checks on the
+     hybrid model that the appended message keeps its cache.
+  4. Put the rows into the table above, and update the reading.
+- **Optional, also pending:** the remaining Claude runs (`presets-ini` and `sqlite-migration`,
+  4 arms × 3 rounds), once the Anthropic key works again.
 
 ## Files
 
@@ -126,5 +157,5 @@ separate task runs these after HML-2:
 - `bench/`: the measurement above. `run.ts` drives pi in-process through its SDK
   (`createAgentSession`) on a copy of `~/.pi/agent`; `run-all.sh local|cloud [ROUNDS]` runs both
   arms, `report.ts` writes `results/summary.md`; `results/*.jsonl` holds one row per run.
-  `tickets/<name>/`: nine TypeScript tickets (repo, issue, reference solution, hidden
+  `tickets/<name>/`: eleven TypeScript tickets (repo, issue, reference solution, hidden
   `node:test` grader); `selftest.ts` checks that each broken repo fails and each reference passes.

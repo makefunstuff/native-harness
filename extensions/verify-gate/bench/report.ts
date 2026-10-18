@@ -11,7 +11,7 @@ export function load(dir = RESULTS): Map<string, Row[]> {
 	const arms = new Map<string, Row[]>();
 	if (!existsSync(dir)) return arms;
 	for (const f of readdirSync(dir).filter((f) => f.endsWith(".jsonl")).sort()) {
-		const rows = readFileSync(join(dir, f), "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+		const rows = readFileSync(join(dir, f), "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)).filter((r) => !r.provider_error);
 		if (rows.length) arms.set(f.slice(0, -6), rows);
 	}
 	return arms;

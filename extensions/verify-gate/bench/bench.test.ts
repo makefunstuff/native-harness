@@ -34,7 +34,10 @@ test("report tables", () => {
 	assert.match(taskTable(arms), /\| t \| 1\/2 \|/);
 });
 
-test("every ticket has a prompt naming the check", () => {
-	assert.ok(ticketNames().length >= 8);
-	for (const t of ticketNames()) assert.match(prompt(t), /node --test/);
+test("prompt styles: told asks for the tests, plain does not mention running them", () => {
+	assert.ok(ticketNames().length >= 9);
+	for (const t of ticketNames()) {
+		assert.match(prompt(t, "told"), /run the tests[\s\S]*node --test/);
+		assert.doesNotMatch(prompt(t, "plain"), /run the tests|node --test/i);
+	}
 });
