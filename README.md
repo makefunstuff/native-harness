@@ -67,12 +67,16 @@ pi install "$PWD"              # use your checkout as the installed package
   stand-in for pi's extension API that records registered tools, commands and providers and fires
   events.
 - **Smoke test**: [`test/smoke.mjs`](test/smoke.mjs) makes a throw-away copy of your pi config
-  (`~/.pi/agent`, without sessions; an empty config when there is none, as in CI), installs this
-  checkout into it, adds a mock OpenAI-compatible model on loopback, and runs `pi -p`: the package
-  must load next to everything else in the config, with no extension errors. It then runs every
+  (`~/.pi/agent`, without sessions; an empty config when there is none, as in CI), installs the
+  package into it the way users do, `pi install git:github.com/makefunstuff/pi-extras`, served
+  from a snapshot of the working tree (so without the dev `node_modules`), adds a mock
+  OpenAI-compatible model on loopback, and runs `pi -p`: the package must load next to everything
+  else in the config, with no extension errors, and the llama-native provider code must load
+  (with a stand-in addon). It then runs every
   `*.smoke.mjs` spec, which scripts the mock model's answers (tool calls included) and checks
   the output; see [`templates/extension/template.smoke.mjs`](templates/extension/template.smoke.mjs).
-  `PI_EXTRAS_SMOKE_CONFIG=empty|copy` picks the config, `PI_EXTRAS_SMOKE_MODEL=provider/id` runs
+  `PI_EXTRAS_SMOKE_CONFIG=empty|copy` picks the config, `PI_EXTRAS_SMOKE_INSTALL=path` skips
+  the git install, `PI_EXTRAS_SMOKE_MODEL=provider/id` runs
   the first step on a real model instead of the mock.
 - **Dependencies**: runtime packages an extension imports go in `dependencies`. pi provides
   `@earendil-works/pi-*` and `typebox` itself: import them, never list them in `dependencies` or

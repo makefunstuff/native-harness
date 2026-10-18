@@ -1,15 +1,21 @@
 #!/usr/bin/env node
-// Headless smoke test: pi -p, on a throw-away copy of the pi config with this package installed,
-// against a mock OpenAI-compatible model on loopback (no real model, so it runs in CI).
+// Headless smoke test: pi -p, on a throw-away copy of the pi config with this package installed
+// the way users install it (`pi install git:github.com/makefunstuff/pi-extras`, served from a
+// snapshot of the working tree, so no dev node_modules), against a mock OpenAI-compatible model on
+// loopback (no real model, so it runs in CI).
 //
 //   1. the package loads: every enabled extension, next to whatever the config already has, and
 //      pi answers a prompt with no extension errors;
-//   2. every *.smoke.mjs spec in the repo (see templates/extension/template.smoke.mjs).
+//   2. the experimental llama-native extension loads its provider code in that install (with a
+//      stand-in addon file: the addon itself is only opened on the first request);
+//   3. every *.smoke.mjs spec in the repo (see templates/extension/template.smoke.mjs).
 //
 // Environment: PI_EXTRAS_SMOKE_CONFIG=copy|empty (default: copy if ~/.pi/agent exists),
 // PI_EXTRAS_SMOKE_SOURCE (config to copy), PI_BIN (pi binary), PI_EXTRAS_SMOKE_MCP=1 (keep MCP),
-// PI_EXTRAS_SMOKE_MODEL=provider/id: run step 1 on that real model instead of the mock (step 2 is skipped).
-import { existsSync, readdirSync } from "node:fs";
+// PI_EXTRAS_SMOKE_INSTALL=path (settings point at this checkout instead of a git install),
+// PI_EXTRAS_SMOKE_MODEL=provider/id: run step 1 on that real model instead of the mock (steps 2-3 are skipped).
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { MOCK_MODEL, REPO, configMode, makeAgentDir, piBin, removeAgentDir, runPi, startMockModel } from "./lib/harness.mjs";
@@ -48,7 +54,7 @@ async function runSpec(spec) {
 	const mock = realModel ? null : await startMockModel(spec.respond);
 	const agent = makeAgentDir({ mockUrl: mock?.url, extensions: spec.extensions });
 	try {
-		const res = await runPi(agent, ["-p", "--model", realModel ?? spec.model ?? MOCK_MODEL, ...(spec.args ?? []), spec.prompt], { timeoutMs: spec.timeoutMs });
+		const res = await runPi(agent, ["-p", "--model", realModel ?? spec.model ?? MOCK_MODEL, ...(spec.args ?? []), spec.prompt], { timeoutMs: spec.timeoutMs, env: spec.env });
 		const out = `--- stdout\n${res.stdout}\n--- stderr\n${res.stderr}`;
 		if (res.code !== 0) throw new Error(`pi exited with ${res.code ?? res.signal}\n${out}`);
 		if (EXTENSION_ERROR.test(res.stderr + res.stdout)) throw new Error(`extension error reported\n${out}`);
@@ -66,7 +72,7 @@ async function runSpec(spec) {
 }
 
 const realModel = process.env.PI_EXTRAS_SMOKE_MODEL;
-console.log(`pi: ${piBin()}, config: ${configMode()}${realModel ? `, model: ${realModel}` : ", model: mock"}`);
+console.log(`pi: ${piBin()}, config: ${configMode()}, install: ${process.env.PI_EXTRAS_SMOKE_INSTALL ?? "git"}${realModel ? `, model: ${realModel}` : ", model: mock"}`);
 
 await check("package loads and pi answers", () =>
 	runSpec({
@@ -82,6 +88,21 @@ await check("package loads and pi answers", () =>
 );
 
 if (!realModel) {
+	await check("llama-native provider loads in the installed package", async () => {
+		const dir = mkdtempSync(join(process.env.PI_EXTRAS_TMP ?? tmpdir(), "pi-extras-addon-"));
+		const addon = join(dir, "llama_native.node");
+		writeFileSync(addon, "");
+		const agent = makeAgentDir();
+		try {
+			const res = await runPi(agent, ["--list-models", "llama-native"], { env: { LLAMA_NATIVE_ADDON: addon } });
+			const out = `--- stdout\n${res.stdout}\n--- stderr\n${res.stderr}`;
+			if (res.code !== 0 || EXTENSION_ERROR.test(res.stderr + res.stdout)) throw new Error(`pi failed (${res.code ?? res.signal})\n${out}`);
+			if (!/llama-native\s+qwen3\.8-27b/.test(res.stdout)) throw new Error(`llama-native model not listed\n${out}`);
+		} finally {
+			removeAgentDir(agent);
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 	for (const file of findSpecs()) {
 		const spec = (await import(pathToFileURL(file).href)).default;
 		await check(`${relative(REPO, file)}: ${spec.name ?? ""}`, () => runSpec(spec));
