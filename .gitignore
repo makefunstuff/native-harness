@@ -8,3 +8,4 @@ results/raw/*/
 results/ctx/raw/*/
 results/ctx/invalid/*/
 bench/tasks-long/
+results/ctx/superseded/*/

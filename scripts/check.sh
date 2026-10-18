@@ -21,7 +21,9 @@ out=$(bash bench/selftest.sh tasks-long); echo "$out"; ! grep -qE "broken-hidden
 echo "== results"; tar -tJf results/raw-artifacts.tar.xz >/dev/null
 python3 bench/report.py >/dev/null
 if [ -f results/ctx/raw-artifacts.tar.xz ]; then tar -tJf results/ctx/raw-artifacts.tar.xz >/dev/null; fi
-python3 bench/ctx_report.py >/dev/null; git diff --quiet -- results/ctx/summary.md || { echo "results/ctx/summary.md is stale: run bench/ctx_report.py"; exit 1; }
+cp results/ctx/summary.md "$TMPDIR/summary.before"
+python3 bench/ctx_report.py >/dev/null; cmp -s results/ctx/summary.md "$TMPDIR/summary.before" || { echo "results/ctx/summary.md was stale (now regenerated): commit it"; exit 1; }
+rm -f "$TMPDIR/summary.before"
 echo "archive and report ok"
 echo "== pi loads the extension"
 AGENT=$(mktemp -d -p "$TMPDIR"); cp -r "$HOME/.pi/agent/models.json" "$AGENT/" 2>/dev/null || echo '{"providers":{}}' > "$AGENT/models.json"

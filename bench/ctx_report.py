@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Summary tables for the HRN-2 A/B (results/ctx/raw/{base,d3}.jsonl) -> results/ctx/summary.md.
 
-Only rounds >= 1 count (round 0 = pilot runs while the extension was being written).
+Only rounds >= 1 count (round 0 = pilot runs while the extension was being written). base has
+rounds 1-4 (1-2 ran next to the superseded first d3 version, 3-4 next to the d3 runs reported
+here), d3 rounds 1-2, d3-27b the two bundles x 2. Arms have different run counts, so the tables
+give means per run, not totals. A last table compares base rounds 1-2 with 3-4: the run-to-run
+noise floor.
 """
 import json, os, statistics as st, sys
 
@@ -15,6 +19,11 @@ def rows(arm):
     if not os.path.exists(p):
         return []
     return [r for r in map(json.loads, open(p)) if r["round"] >= 1]
+
+
+def mean(xs):
+    xs = list(xs)
+    return sum(xs) / len(xs)
 
 
 def fmt(x, d=0):
@@ -37,40 +46,39 @@ def main():
     line("runs", lambda r: str(len(r)))
     line("solved (hidden tests pass)", lambda r: f"{sum(x['passed'] for x in r)}/{len(r)}")
     line("timeouts", lambda r: str(sum(x["timed_out"] for x in r)))
-    line("tokens processed, total (M)", lambda r: fmt(sum(x["tokens_processed"] for x in r) / 1e6, 2))
-    line("  of which cache-miss input (M)", lambda r: fmt(sum(x["in_miss"] for x in r) / 1e6, 2))
-    line("  of which cache-hit input (M)", lambda r: fmt(sum(x["in_hit"] for x in r) / 1e6, 2))
-    line("  of which output (M)", lambda r: fmt(sum(x["out"] for x in r) / 1e6, 3))
-    line("cost, total (USD)", lambda r: fmt(sum(x["cost_usd"] for x in r), 3))
-    line("cost per run, median (USD)", lambda r: fmt(st.median(x["cost_usd"] for x in r), 4))
+    line("tokens processed per run, mean (k)", lambda r: fmt(mean(x["tokens_processed"] for x in r) / 1e3))
+    line("  cache-miss input per run, mean (k)", lambda r: fmt(mean(x["in_miss"] for x in r) / 1e3))
+    line("  cache-hit input per run, mean (k)", lambda r: fmt(mean(x["in_hit"] for x in r) / 1e3))
+    line("  output per run, mean (k)", lambda r: fmt(mean(x["out"] for x in r) / 1e3, 1))
+    line("cost per run, mean (US cents)", lambda r: fmt(100 * mean(x["cost_usd"] for x in r), 2))
+    line("cost per run, median (US cents)", lambda r: fmt(100 * st.median(x["cost_usd"] for x in r), 2))
     line("peak context, median of runs (tokens)", lambda r: fmt(st.median(x["ctx_peak"] for x in r)))
     line("peak context, max (tokens)", lambda r: fmt(max(x["ctx_peak"] for x in r)))
     line("mean context per request, median of runs", lambda r: fmt(st.median(x["ctx_mean"] for x in r)))
-    line("turns, median", lambda r: fmt(st.median(x["turns"] for x in r)))
-    line("turns, total", lambda r: fmt(sum(x["turns"] for x in r)))
-    line("wall time, median (s)", lambda r: fmt(st.median(x["wall_s"] for x in r)))
-    line("wall time, total (min)", lambda r: fmt(sum(x["wall_s"] for x in r) / 60, 1))
-    line("pi compactions", lambda r: str(sum(x["compactions"] for x in r)))
-    line("repeated identical tool calls", lambda r: str(sum(x["repeat_calls"] for x in r)))
-    line("removed by d3, then re-run identically", lambda r: str(sum(x.get("removed_rerun", 0) for x in r)))
-    line("d3 calls / total d3 time (s)", lambda r: f"{sum(x['d3_calls'] for x in r)} / {fmt(sum(x['d3_ms'] for x in r) / 1000, 1)}")
+    line("turns per run, mean / median", lambda r: f"{mean(x['turns'] for x in r):.1f} / {st.median(x['turns'] for x in r):.0f}")
+    line("wall time per run, mean / median (s)", lambda r: f"{mean(x['wall_s'] for x in r):.0f} / {st.median(x['wall_s'] for x in r):.0f}")
+    line("pi compactions per run", lambda r: f"{mean(x['compactions'] for x in r):.2f}")
+    line("repeated identical tool calls per run", lambda r: f"{mean(x['repeat_calls'] for x in r):.2f}")
+    line("removed by d3, then re-run identically (total)", lambda r: str(sum(x.get("removed_rerun", 0) for x in r)))
+    line("d3 calls per run / d3 time per run (s)", lambda r: f"{mean(x['d3_calls'] for x in r):.0f} / {mean(x['d3_ms'] for x in r) / 1000:.1f}")
     line("d3 time as share of wall time", lambda r: f"{100 * sum(x['d3_ms'] for x in r) / 1000 / max(1, sum(x['wall_s'] for x in r)):.1f}%")
-    line("d3 edits applied (boundary / pressure)", lambda r: f"{sum(x['d3_boundary_applies'] for x in r)} / {sum(x['d3_pressure_applies'] for x in r)}")
-    line("items dropped / summarised", lambda r: f"{sum(x['d3_dropped'] for x in r)} / {sum(x['d3_summarised'] for x in r)}")
-    out += ["", "## The two bundled tickets only (release-a, release-b: the long sessions; all three arms, 4 runs each)", "",
+    line("d3 edits applied, total (boundary / pressure)", lambda r: f"{sum(x['d3_boundary_applies'] for x in r)} / {sum(x['d3_pressure_applies'] for x in r)}")
+    line("items dropped / summarised, total", lambda r: f"{sum(x['d3_dropped'] for x in r)} / {sum(x['d3_summarised'] for x in r)}")
+    out += ["", "## The two bundled tickets only (release-a, release-b: the long sessions; means per run)", "",
             "| measure | " + " | ".join(ARMS) + " |", "|---|" + "---|" * len(ARMS)]
     full = data
     data = {a: [x for x in r if x["task"].startswith("release-")] for a, r in full.items()}
-    line("solved", lambda r: f"{sum(x['passed'] for x in r)}/{len(r)}")
-    line("tokens processed (M)", lambda r: fmt(sum(x["tokens_processed"] for x in r) / 1e6, 2))
-    line("cache-miss input (M)", lambda r: fmt(sum(x["in_miss"] for x in r) / 1e6, 2))
-    line("cost (USD)", lambda r: fmt(sum(x["cost_usd"] for x in r), 3))
+    line("runs / solved", lambda r: f"{len(r)} / {sum(x['passed'] for x in r)}")
+    line("tokens processed per run (k)", lambda r: fmt(mean(x["tokens_processed"] for x in r) / 1e3))
+    line("cache-miss input per run (k)", lambda r: fmt(mean(x["in_miss"] for x in r) / 1e3))
+    line("cost per run (US cents)", lambda r: fmt(100 * mean(x["cost_usd"] for x in r), 2))
     line("peak context, median (tokens)", lambda r: fmt(st.median(x["ctx_peak"] for x in r)))
     line("mean context per request, median", lambda r: fmt(st.median(x["ctx_mean"] for x in r)))
-    line("turns, total", lambda r: fmt(sum(x["turns"] for x in r)))
-    line("wall time, total (s)", lambda r: fmt(sum(x["wall_s"] for x in r)))
-    line("pi compactions", lambda r: str(sum(x["compactions"] for x in r)))
-    line("d3 time, total (s)", lambda r: fmt(sum(x["d3_ms"] for x in r) / 1000))
+    line("turns per run", lambda r: f"{mean(x['turns'] for x in r):.1f}")
+    line("wall time per run (s)", lambda r: fmt(mean(x["wall_s"] for x in r)))
+    line("pi compactions per run", lambda r: f"{mean(x['compactions'] for x in r):.2f}")
+    line("d3 time per run (s)", lambda r: fmt(mean(x["d3_ms"] for x in r) / 1000))
+    line("d3 edits per run (boundary / pressure)", lambda r: f"{mean(x['d3_boundary_applies'] for x in r):.1f} / {mean(x['d3_pressure_applies'] for x in r):.1f}")
     data = full
     out += ["", "## Per ticket (passes; median tokens processed in k; median peak context in k; median cost in USD cents)", "",
             "| ticket | " + " | ".join(ARMS) + " |", "|---|" + "---|" * len(ARMS)]
@@ -85,6 +93,20 @@ def main():
             cells.append(f"{sum(r['passed'] for r in rs)}/{len(rs)}; {fmt(st.median(r['tokens_processed'] for r in rs) / 1e3)}k; "
                          f"{fmt(st.median(r['ctx_peak'] for r in rs) / 1e3)}k; {fmt(100 * st.median(r['cost_usd'] for r in rs), 2)}¢")
         out.append(f"| {t} | " + " | ".join(cells) + " |")
+    if "base" in data:
+        b12 = [x for x in data["base"] if x["round"] <= 2]
+        b34 = [x for x in data["base"] if x["round"] >= 3]
+        if b12 and b34:
+            out += ["", "## Noise floor: base rounds 1-2 vs base rounds 3-4 (same arm, means per run)", "",
+                    "| | base r1-2 | base r3-4 | base r1-2, bundles | base r3-4, bundles |", "|---|---|---|---|---|"]
+            bb12 = [x for x in b12 if x["task"].startswith("release-")]
+            bb34 = [x for x in b34 if x["task"].startswith("release-")]
+            for name, f in [("runs", lambda r: str(len(r))),
+                            ("tokens processed per run (k)", lambda r: fmt(mean(x["tokens_processed"] for x in r) / 1e3)),
+                            ("cache-miss input per run (k)", lambda r: fmt(mean(x["in_miss"] for x in r) / 1e3)),
+                            ("cost per run (US cents)", lambda r: fmt(100 * mean(x["cost_usd"] for x in r), 2)),
+                            ("turns per run", lambda r: f"{mean(x['turns'] for x in r):.1f}")]:
+                out.append(f"| {name} | {f(b12)} | {f(b34)} | {f(bb12)} | {f(bb34)} |")
     text = "\n".join(out) + "\n"
     os.makedirs(os.path.join(REPO, "results", "ctx"), exist_ok=True)
     open(os.path.join(REPO, "results", "ctx", "summary.md"), "w").write(text)

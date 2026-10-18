@@ -8,10 +8,12 @@
 // These are separate small calls, not one joint call: the server runs every question of a d3
 // request as its own full pass over the whole state, so a joint call costs n_questions x state.
 // For items marked summarise/drop, a second call asks which of their key lines (paths, errors,
-// failing tests, values) must be pinned. At a boundary (or, as a fallback, when the context is
-// close to full) the decisions are applied: the item is replaced by a stub holding its pinned
-// lines (drop) or by an extractive summary plus the pins (summarise). Applied edits are sticky,
-// so the prompt prefix stays stable between edits (provider prompt caches keep working).
+// failing tests, values) must be pinned. At a boundary (or, as a fallback, when the request as
+// actually sent, i.e. after the edits already made, is close to full) the decisions are applied:
+// the item is replaced by a short stub (drop) or by an extractive summary (summarise), and its
+// pinned lines go into one shared "Pinned notes" block. The block rides on the newest message of
+// each request, so changing it only touches the uncached tail. Applied edits are sticky, so the
+// prompt prefix stays stable between edits (provider prompt caches keep working).
 // d3 does not generate text: summaries are extractive, chosen lines only. Checks run in the
 // background, so the agent never waits for them; their edits apply from the next request on.
 //
@@ -24,8 +26,8 @@
 //   D3_CHECK_TURNS    assistant turns between checks (default 2)
 //   D3_MIN_ITEM       smallest item judged, chars (default 1500)
 //   D3_KEEP_TURNS     results of the newest N assistant turns are never touched (default 2)
-//   D3_PRESSURE       apply decisions without a boundary once the context is this many
-//                     estimated tokens (default 80000)
+//   D3_PRESSURE       apply decisions without a boundary once the request as sent (edits and
+//                     notes included) is this many estimated tokens (default 80000)
 //   D3_MIN_SAVE       do not edit (and break the prompt cache) to save fewer chars (default 4000)
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { appendFileSync } from "node:fs";
@@ -40,6 +42,7 @@ const PRESSURE = Number(process.env.D3_PRESSURE ?? 80000);
 const MIN_SAVE = Number(process.env.D3_MIN_SAVE ?? 4000);
 const STATE_BUDGET = 15000; // chars of state per call (d3-flash has an 8k-token context)
 const PINS_PER_ITEM = 6;
+const NOTES_MAX = 3000; // chars of the shared notes block (oldest pins go first)
 const CHARS_PER_TOKEN = 3.5;
 
 type Decision = "keep" | "summarise" | "drop";
@@ -143,6 +146,7 @@ export default function (pi: ExtensionAPI) {
 		return;
 	}
 	const applied = new Map<string, Applied>();
+	const notes: string[] = []; // pinned lines, oldest first, each "label: line"
 	let lastCheckTurn = 0;
 	let task = "";
 	let running: Promise<unknown> | undefined;
@@ -188,8 +192,9 @@ export default function (pi: ExtensionAPI) {
 			}
 		});
 		const open = items.filter((it) => !applied.has(it.key));
-		const totalChars = msgs.reduce((a, m) => a + msgChars(m), 0) + task.length;
-		const estTokens = totalChars / CHARS_PER_TOKEN + 6000; // + system prompt and tools
+		const out = render(msgs);
+		// the size of the request as it is actually sent: earlier edits and the notes block included
+		const estTokens = out.reduce((a, m) => a + msgChars(m), 0) / CHARS_PER_TOKEN + 6000; // + system prompt and tools
 		const last = msgs[msgs.length - 1];
 		const due = open.length > 0 && last?.role === "toolResult" && nTurns - lastCheckTurn >= CHECK_TURNS;
 		// the check runs in the background: its edits apply from the next request on, so the agent
@@ -201,25 +206,29 @@ export default function (pi: ExtensionAPI) {
 				.finally(() => (running = undefined));
 		}
 		if (applied.size === 0) return;
-		let edited = 0;
+		return { messages: out };
+	});
+
+	// the transcript with the applied edits, and the notes block on its newest message
+	function render(msgs: any[]): any[] {
+		if (applied.size === 0) return msgs;
 		const out = msgs.map((m, i) => {
-			if (m.role === "toolResult" && applied.has(m.toolCallId)) {
-				edited++;
+			if (m.role === "toolResult" && applied.has(m.toolCallId))
 				return { ...m, content: [{ type: "text", text: applied.get(m.toolCallId)!.replacement }] };
-			}
 			if (m.role === "assistant") {
-				const k = `a:${m.timestamp ?? i}`;
-				const a = applied.get(k);
-				if (a) {
-					edited++;
-					const calls = (m.content ?? []).filter((b: any) => b.type === "toolCall");
-					return { ...m, content: [{ type: "text", text: a.replacement }, ...calls] };
-				}
+				const a = applied.get(`a:${m.timestamp ?? i}`);
+				if (a) return { ...m, content: [{ type: "text", text: a.replacement }, ...(m.content ?? []).filter((b: any) => b.type === "toolCall")] };
 			}
 			return m;
 		});
-		return { messages: out };
-	});
+		const lastMsg = out[out.length - 1];
+		if (notes.length && (lastMsg?.role === "toolResult" || lastMsg?.role === "user")) {
+			const block = `[d3-context] Pinned notes from outputs removed earlier (re-run a tool for full text):\n${notes.map((l) => `- ${l}`).join("\n")}`;
+			const content = typeof lastMsg.content === "string" ? [{ type: "text", text: lastMsg.content }] : [...(lastMsg.content ?? [])];
+			out[out.length - 1] = { ...lastMsg, content: [...content, { type: "text", text: block }] };
+		}
+		return out;
+	}
 
 	function progress(msgs: any[], calls: Map<string, any>): string {
 		const steps: string[] = [];
@@ -319,14 +328,19 @@ export default function (pi: ExtensionAPI) {
 					pins = cands.slice(0, 4);
 				}
 			}
-			const pinBlock = pins.length ? `\nPinned notes:\n${pins.map((l) => `- ${l}`).join("\n")}` : "";
 			const what = it.kind === "tool" ? `output of \`${it.label}\`` : it.label;
+			for (const l of pins) {
+				const n = `${short(it.label, 60)}: ${l}`;
+				if (!notes.includes(n)) notes.push(n);
+			}
+			while (notes.join("\n").length > NOTES_MAX) notes.shift();
+			const pinRef = pins.length ? " Its key lines are in the pinned notes." : "";
 			const replacement = d === "drop"
-				? `[d3-context: ${what} (${it.text.length} chars) was removed from the context as no longer needed. Re-run the tool if you need it again.]${pinBlock}`
-				: `[d3-context: ${what} (${it.text.length} chars) was shortened to its key lines. Re-run the tool for the full text.]\n${summarise(it.text)}${pinBlock}`;
+				? `[d3-context: ${what} (${it.text.length} chars) was removed from the context as no longer needed.${pinRef} Re-run the tool if you need it again.]`
+				: `[d3-context: ${what} (${it.text.length} chars) was shortened to its key lines.${pinRef} Re-run the tool for the full text.]\n${summarise(it.text)}`;
 			applied.set(it.key, { decision: d, replacement });
 		}
 		log({ kind: "apply", turn: nTurns, reason: atBoundary ? "boundary" : "pressure", items: toApply.map((it) => ({ key: it.key, label: it.label, decision: decisions.get(it.key)!.d })),
-			saved_chars: saving, total_applied: applied.size, d3_ms: Math.round(ms), d3_calls: calls_n, wall_ms: Math.round(performance.now() - t0) });
+			saved_chars: saving, total_applied: applied.size, notes_lines: notes.length, d3_ms: Math.round(ms), d3_calls: calls_n, wall_ms: Math.round(performance.now() - t0) });
 	}
 }
