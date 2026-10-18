@@ -181,9 +181,10 @@ export function expired(n: Note, ttlDays: number, now = Date.now()): boolean {
 	return ttlDays > 0 && now - Date.parse(n.updated) > ttlDays * 86_400_000;
 }
 
-// The message shown to the agent at the start of a task: only the notes that passed the judge.
+// The message shown to the agent at the start of a task: only the notes that passed the judge,
+// evidence cut short (at most k notes of ~900 characters each).
 export function lessonsMessage(shown: Array<{ label: string; note: Note }>): string {
-	const lines = shown.map(({ label, note }) => `${label}. When ${note.cue}: ${note.lesson}${note.evidence ? ` (seen: ${note.evidence})` : ""}`);
+	const lines = shown.map(({ label, note }) => `${label}. When ${note.cue}: ${note.lesson}${note.evidence ? ` (seen: ${clip(note.evidence, 160)})` : ""}`);
 	return [
 		"Lessons from earlier sessions in this repository (they were written after a failure was fixed; check each against the code before relying on it):",
 		...lines,
