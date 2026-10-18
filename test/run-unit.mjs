@@ -14,6 +14,7 @@ const walk = (dir) => {
 		if (d.name === "node_modules" || d.name.startsWith(".")) continue;
 		if (d.name === "tasks" && dir.endsWith("bench")) continue; // benchmark tickets: graded by their bench, not unit tests
 		const p = join(dir, d.name);
+		if (/[\\/]bench[\\/]tasks$/.test(p)) continue; // benchmark tickets: their tests are graded by the bench
 		if (d.isDirectory()) walk(p);
 		else if (/\.test\.(ts|mjs)$/.test(d.name)) files.push(p);
 	}
