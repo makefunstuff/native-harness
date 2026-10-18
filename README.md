@@ -74,6 +74,10 @@ pi install "$PWD"              # use your checkout as the installed package
   the output; see [`templates/extension/template.smoke.mjs`](templates/extension/template.smoke.mjs).
   `PI_EXTRAS_SMOKE_CONFIG=empty|copy` picks the config, `PI_EXTRAS_SMOKE_MODEL=provider/id` runs
   the first step on a real model instead of the mock.
+- **Dependencies**: runtime packages an extension imports go in `dependencies`. pi provides
+  `@earendil-works/pi-*` and `typebox` itself: import them, never list them in `dependencies` or
+  `peerDependencies` (next to the pi devDependency, npm would then lock them for production and
+  git installs would get their own copy); `test/package.test.mjs` checks this.
 - **CI**: [GitHub Actions](.github/workflows/ci.yml) runs `scripts/check.sh` on Node 22 and 24.
   `PI_EXTRAS_NATIVE_CHECK=1 scripts/check.sh` also builds the llama-native addon (local only,
   needs llama.cpp).
