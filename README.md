@@ -8,7 +8,7 @@ extension on or off on its own.
 
 | extension | what it does | status |
 |---|---|---|
-| _coming soon_ | the first extensions are being written | |
+| [`thinking-guard`](extensions/thinking-guard/README.md) | stops runaway thinking: gives llama.cpp servers a per-request thinking budget, and aborts and re-issues a reply that still thinks too long, with a "stop deliberating, act with a tool" note appended (append-only, so the prompt cache survives) | on for local models |
 | [`llama-native`](experimental/llama-native/README.md) | runs llama.cpp inside pi's own process as a model provider (`llama-native/…`); needs a llama.cpp build and a native addon you compile, does nothing without it. Results: [RESULTS.md](experimental/llama-native/RESULTS.md) | **experimental** |
 
 Each extension lives in its own folder under `extensions/<name>/` with its own README;
