@@ -43,7 +43,7 @@ loaded into pi's Node process through a Node-API binding of libllama. The result
     wins when the edit is undone (its prompt cache).
 - **No effect:** the tool-call grammar (0 malformed calls without it); the done-check decision
   (the model always rated itself done, p ≥ 0.994, even on a failed ticket); entropy as an
-  uncertainty trigger (AUC 0.49 for tool errors).
+  uncertainty trigger (AUC 0.52 for tool errors).
 - **Not tested** (benchmark stopped): pruning inside real tickets (it never triggered), the helper
   model, think-routing, compaction on a fork, the long-context session, an "HTTP done well"
   ticket arm.
