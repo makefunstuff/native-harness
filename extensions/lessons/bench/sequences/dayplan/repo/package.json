@@ -1,0 +1,13 @@
+{
+  "name": "dayplan",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "house-rules",
+    "test": "node --test 'tests/**/*.spec.ts'"
+  },
+  "devDependencies": {
+    "house-rules": "^1.4.0"
+  }
+}

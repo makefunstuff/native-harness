@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FixTracker, commandKey, errorExcerpt, isCheck } from "./detect.ts";
+import { FixTracker, commandKey, errorExcerpt, isCheck, isSearch } from "./detect.ts";
 import { LIMITS, askMessage, expired, keepScore, lessonsMessage, makeNote, merge, noteId, parseReply, rankByText, similarity, tokens } from "./note.ts";
 
 test("parseReply reads lesson blocks, continuation lines, confirms and contradicts", () => {
@@ -82,9 +82,21 @@ test("commandKey strips cd, env, filters and redirections", () => {
 	assert.ok(!isCheck("node scripts/gen.js"));
 });
 
+test("commandKey: chains are judged by their last check; heredoc bodies are ignored", () => {
+	const write = "cd /w && cat > src/ops/x.ts <<'EOF'\nexport function f() { return a && b; } // test\nEOF\nnpm test && git status --short";
+	assert.equal(commandKey(write), "npm test");
+	assert.ok(isCheck(write));
+	assert.ok(!isSearch(write), "cat > file is a write, not a search");
+	assert.ok(isSearch("cd /w && cat a.ts; grep -n foo src | head"));
+	assert.ok(isSearch("ls tests 2>&1"));
+	assert.equal(commandKey("mkdir -p tests/ops && node gen.js"), "node gen.js");
+});
+
 test("errorExcerpt prefers assertion lines", () => {
 	const out = "TAP version 13\nok 1 - a\nnot ok 2 - vat rounds\n  AssertionError: expected 13 to equal 12\n# pass 1\n# fail 1";
 	assert.match(errorExcerpt(out), /not ok 2 - vat rounds \| AssertionError: expected 13 to equal 12/);
+	const npm = "> pretest\n> house-rules\n\nhouse-rules: 1 problem\n  src/ops/x.ts has no test file tests/ops/x.spec.ts\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1";
+	assert.equal(errorExcerpt(npm), "house-rules: 1 problem | src/ops/x.ts has no test file tests/ops/x.spec.ts");
 });
 
 test("FixTracker pairs a failure with a later pass of the same command or any check", () => {
@@ -98,6 +110,12 @@ test("FixTracker pairs a failure with a later pass of the same command or any ch
 	assert.deepEqual(t.fixes.map((f) => f.failed), ["npm test"]);
 	t.onBash("node gen.js", false, "done", 0); // same command passes
 	assert.deepEqual(t.fixes.map((f) => f.failed), ["npm test", "node gen.js"]);
+	const piped = new FixTracker();
+	piped.onBash("npm test 2>&1 | tail -60", false, "> house-rules\nhouse-rules: 2 problems\n  CHANGELOG.md does not mention `f`", 0);
+	piped.onBash("npm test 2>&1 | tail -60", false, "house-rules: ok\nℹ pass 4\nℹ fail 0", 0);
+	assert.deepEqual(piped.fixes.map((f) => f.failed), ["npm test"], "a pipe hides the exit code; the output does not");
+	piped.onBash("npm test", false, "ℹ fail 1", 0);
+	assert.equal(piped.failures, 1, "without a pipe the exit code is trusted");
 	t.onBash("npm test", true, "Command timed out after 60 seconds", 124);
 	t.onBash("npm test", false, "ok", 0);
 	assert.equal(t.fixes.length, 2, "a timeout is not a code failure");

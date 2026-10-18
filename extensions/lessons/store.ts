@@ -194,27 +194,61 @@ export class Library {
 
 	async recall(repo: string, query: string, k: number, signal?: AbortSignal): Promise<Recall> {
 		const now = Date.now();
-		const local = this.live(repo, now);
+		let local = this.live(repo, now);
+		const ranked = rankByText(query, local)
+			.filter((r) => r.score > 0)
+			.slice(0, k)
+			.map((r) => ({ note: r.note, score: r.score, source: "file" as const }));
 		let fallback: string | undefined;
 		if (this.hindsight) {
 			try {
 				const hits = await this.hindsight.recall(repo, query, k, signal);
 				// The local copy is newer for notes written or contradicted on this machine; notes
-				// only Hindsight has (another machine) are taken as they are, unless expired.
+				// only Hindsight has (another machine) are taken as they are, unless expired. Local
+				// notes Hindsight did not return (a write that failed, or a weaker semantic match)
+				// still compete through plain-text matching.
 				const byId = new Map(local.map((n) => [n.id, n]));
-				const merged = hits
+				const merged: Candidate[] = hits
 					.map((c) => ({ ...c, note: byId.get(c.note.id) ?? c.note }))
 					.filter((c) => !expired(c.note, this.cfg.ttlDays, now) && c.note.confidence >= this.cfg.dropBelow);
+				const seen = new Set(merged.map((c) => c.note.id));
+				merged.push(...ranked.filter((c) => !seen.has(c.note.id)));
+				local = await this.sync(repo, local, signal);
 				return { candidates: merged, source: "hindsight" };
 			} catch (e) {
 				fallback = `Hindsight recall failed (${String((e as Error)?.message ?? e).slice(0, 160)}); using plain-text matching on the local copy`;
 			}
 		}
-		const ranked = rankByText(query, local)
-			.filter((r) => r.score > 0)
-			.slice(0, k)
-			.map((r) => ({ note: r.note, score: r.score, source: "file" as const }));
 		return { candidates: ranked, source: "file", fallback };
+	}
+
+	// Retry the Hindsight writes that failed earlier (a few per call; stops at the first failure).
+	private async sync(repo: string, notes: Note[], signal?: AbortSignal): Promise<Note[]> {
+		const todo = notes.filter((n) => n.synced === false).slice(0, 3);
+		if (!todo.length || !this.hindsight) return notes;
+		for (const n of todo) {
+			try {
+				await this.hindsight.save(n, signal);
+				n.synced = true;
+			} catch {
+				break;
+			}
+		}
+		this.files.write(repo, notes);
+		return notes;
+	}
+
+	// Write a note to Hindsight; the local copy remembers whether that worked.
+	private async push(note: Note, signal?: AbortSignal, evicted: string[] = []): Promise<void> {
+		if (!this.hindsight) return;
+		try {
+			await this.hindsight.save(note, signal);
+			for (const id of evicted) await this.hindsight.remove(id, signal);
+			note.synced = true;
+		} catch (e) {
+			note.synced = false;
+			this.errors.push(`Hindsight write failed (${String((e as Error)?.message ?? e).slice(0, 160)}); the lesson is kept in the local copy and sent again later`);
+		}
 	}
 
 	// Save a new note: merged into an existing one that says the same thing, else added; the
@@ -248,15 +282,8 @@ export class Library {
 			notes.sort((a, b) => keepScore(b, now) - keepScore(a, now));
 			for (const n of notes.splice(this.cfg.maxNotes)) if (n.id !== note.id) evicted.push(n.id);
 		}
+		await this.push(note, signal, evicted);
 		this.files.write(fresh.repo, notes);
-		if (this.hindsight) {
-			try {
-				await this.hindsight.save(note, signal);
-				for (const id of evicted) await this.hindsight.remove(id, signal);
-			} catch (e) {
-				this.errors.push(`Hindsight write failed (${String((e as Error)?.message ?? e).slice(0, 160)}); the lesson is kept in the local copy`);
-			}
-		}
 		return { note, action, evicted };
 	}
 
@@ -271,17 +298,19 @@ export class Library {
 		const drop = next.confidence < this.cfg.dropBelow;
 		if (drop) {
 			if (i >= 0) notes.splice(i, 1);
-		} else if (i >= 0) notes[i] = next;
-		else notes.push(next);
-		this.files.write(repo, notes);
-		if (this.hindsight) {
-			try {
-				if (drop) await this.hindsight.remove(note.id, signal);
-				else await this.hindsight.save(next, signal);
-			} catch (e) {
-				this.errors.push(`Hindsight update failed (${String((e as Error)?.message ?? e).slice(0, 160)})`);
+			if (this.hindsight) {
+				try {
+					await this.hindsight.remove(note.id, signal);
+				} catch (e) {
+					this.errors.push(`Hindsight delete failed (${String((e as Error)?.message ?? e).slice(0, 160)})`);
+				}
 			}
+		} else {
+			if (i >= 0) notes[i] = next;
+			else notes.push(next);
+			await this.push(next, signal);
 		}
+		this.files.write(repo, notes);
 		return drop ? "dropped" : "updated";
 	}
 

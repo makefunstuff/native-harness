@@ -13,6 +13,7 @@ export interface Note {
 	created: string; // ISO time
 	updated: string; // ISO time of the last write, confirmation or merge
 	hits: number; // how often it was written again, merged or confirmed
+	synced?: boolean; // local copy only: false while a Hindsight write is still owed
 }
 
 export const LIMITS = { cue: 200, lesson: 500, evidence: 400 };

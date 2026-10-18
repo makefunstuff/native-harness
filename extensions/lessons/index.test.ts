@@ -17,7 +17,7 @@ let n = 0;
 const dir = () => join(tmp, `d${n++}`);
 
 // A stand-in for Hindsight's retain / recall / delete endpoints, keeping documents in memory.
-async function fakeHindsight(opts: { failRecall?: boolean } = {}) {
+async function fakeHindsight(opts: { failRecall?: boolean; failRetain?: boolean } = {}) {
 	const docs = new Map<string, any>();
 	const seen: any[] = [];
 	const server = createServer(async (req, res) => {
@@ -30,6 +30,7 @@ async function fakeHindsight(opts: { failRecall?: boolean } = {}) {
 			res.end(JSON.stringify(data));
 		};
 		if (req.method === "POST" && req.url!.endsWith("/memories")) {
+			if (opts.failRetain) return reply(500, { detail: "could not resize shared memory segment" });
 			for (const it of payload.items) docs.set(it.document_id, it);
 			return reply(200, { success: true });
 		}
@@ -127,6 +128,27 @@ test("Library falls back to the local copy and says why when Hindsight recall fa
 	await lib.save(makeNote("r", { cue: "c", lesson: "l" }));
 	assert.equal(lib.files.list("r").length, 1);
 	assert.match(lib.errors[0], /Hindsight write failed/);
+});
+
+test("a failed Hindsight write: the note still comes back (local copy) and is sent again once Hindsight works", async () => {
+	const opts = { failRetain: true };
+	const h = await fakeHindsight(opts);
+	try {
+		const lib = new Library(new FileStore(dir()), new HindsightStore({ url: h.url, bank: "b", timeoutMs: 5000 }));
+		const s = await lib.save(makeNote("r", { cue: "rounding money amounts", lesson: "use roundHalfEven" }));
+		assert.match(lib.errors[0], /Hindsight write failed \(Hindsight answered 500.*sent again later/);
+		assert.equal(lib.files.list("r")[0].synced, false);
+		const rec = await lib.recall("r", "a VAT amount rounded to cents", 5);
+		assert.equal(rec.source, "hindsight");
+		assert.equal(rec.fallback, undefined);
+		assert.deepEqual(rec.candidates.map((c) => [c.note.id, c.source]), [[s.note.id, "file"]]);
+		opts.failRetain = false;
+		await lib.recall("r", "anything", 5);
+		assert.ok(h.docs.has(s.note.id), "sent on the next recall");
+		assert.equal(lib.files.list("r")[0].synced, true);
+	} finally {
+		await h.close();
+	}
 });
 
 test("judge: classifier keeps lessons by probability; failure falls back to the threshold", async () => {
