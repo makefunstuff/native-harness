@@ -36,7 +36,8 @@ function repairEdit(e: unknown): unknown {
 	const oldText = pick(o, OLD_KEYS);
 	const newText = pick(o, NEW_KEYS);
 	if (typeof oldText !== "string") return e;
-	return { oldText, newText: typeof newText === "string" ? newText : newText == null ? "" : String(newText) };
+	// a missing newText stays missing: schema validation rejects it rather than deleting the text
+	return typeof newText === "string" ? { oldText, newText } : { oldText };
 }
 
 /** Argument repair; returns a new object, never mutates the model's arguments. */

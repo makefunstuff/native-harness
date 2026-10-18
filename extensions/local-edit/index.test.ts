@@ -175,6 +175,8 @@ test("repairArguments: aliases and shapes, without touching the input", () => {
 	assert.deepEqual(s.edits, [{ oldText: "1", newText: "2" }]);
 	const one: any = repairArguments({ path: "a", edits: { oldText: "1", newText: "2" } });
 	assert.deepEqual(one.edits, [{ oldText: "1", newText: "2" }]);
+	const missing: any = repairArguments({ path: "a", old_string: "1" });
+	assert.deepEqual(missing.edits, [{ oldText: "1" }], "no newText is not turned into a deletion");
 });
 
 test("the edit tool replaces pi's, keeps its schema, and applies a tolerant edit with a diff", async () => {

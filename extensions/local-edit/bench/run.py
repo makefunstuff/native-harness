@@ -95,7 +95,9 @@ def grade(ticket, name, work, args):
         validator = os.path.join(args.capability_suite, "validators", CAP_TASKS[name]["validator"])
         h = subprocess.run([sys.executable, validator, work], capture_output=True, text=True, timeout=180,
                            env={"PATH": "/usr/bin:/bin", "HOME": "/tmp"}, cwd=work)
-    return h.returncode == 0, (h.stdout + h.stderr)[-600:]
+    out = h.stdout + h.stderr
+    failed = sorted(set(re.findall(r"^(?:FAIL|ERROR): (\w+)", out, re.M)))
+    return h.returncode == 0, out[-600:], failed
 
 
 def norm(s):
@@ -225,9 +227,10 @@ def run_one(arm, args, agent_dir, name, ticket, rnd):
         rc, timed_out = None, True
     wall = round(time.time() - t0, 1)
     open(os.path.join(logs, run + ".diff"), "w").write(sh("git add -A && git diff --cached", work).stdout)
-    passed, tail = grade(ticket, name, work, args)
+    passed, tail, failed_tests = grade(ticket, name, work, args)
     row = {"arm": arm, "model": args.model, "edit": args.edit, "task": name, "round": rnd, "passed": passed,
-           "collateral_lines": collateral(ticket, work), "wall_s": wall, "agent_rc": rc, "timed_out": timed_out,
+           "collateral_lines": collateral(ticket, work),
+           "failed_tests": failed_tests, "untouched_broken": any("untouched" in t or "tabs_kept" in t for t in failed_tests), "wall_s": wall, "agent_rc": rc, "timed_out": timed_out,
            **session_stats(sess), "hidden_tail": tail[-300:].replace(work, ".").replace(os.path.expanduser("~"), "~")}
     shutil.rmtree(work, ignore_errors=True)
     return row
