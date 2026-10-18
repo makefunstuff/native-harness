@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { callKey, LoopGuard, outcomeKey, parseOptions, stallIntent } from "./guard.ts";
 
-test("callKey ignores key order, whitespace and bash output plumbing", () => {
-	assert.equal(callKey("edit", { path: "a.py", oldText: "x  =\n 1" }), callKey("edit", { oldText: "x = 1", path: "a.py" }));
+test("callKey ignores key order, command whitespace and bash output plumbing", () => {
+	assert.equal(callKey("edit", { path: "a.py", oldText: "x = 1" }), callKey("edit", { oldText: "x = 1", path: "a.py" }));
+	assert.notEqual(callKey("edit", { path: "a.py", oldText: "foo" }), callKey("edit", { path: "a.py", oldText: "foo " }));
+	assert.equal(callKey("bash", { command: "ls  -la\n src" }), callKey("bash", { command: "ls -la src" }));
 	assert.equal(callKey("bash", { command: "pytest -q" }), callKey("bash", { command: "pytest  -q 2>&1 | tail -20" }));
 	assert.equal(callKey("bash", { command: "pytest -q 2>&1 | head -n 40" }), callKey("bash", { command: "pytest -q" }));
 	assert.notEqual(callKey("bash", { command: "pytest -q" }), callKey("bash", { command: "pytest -q tests/a.py" }));
@@ -133,6 +135,11 @@ test("stallIntent: waiting, conditions, negations and questions are not stalls",
 		"Say go, or pick numbers. I'll build them once that agent finishes.",
 		"And I will not touch your relaunched app.",
 		"I'll watch the next update.",
+		"Fixed the bug. I should note that the old API is deprecated.",
+		"All tests pass. Let's recap: the change renames foo.",
+		"Done. I need to mention that you must restart the server.",
+		"Everything is in place.\n\nNext, I recommend running the full suite yourself.",
+		"Summary done. I'll also note that X is slow.",
 	])
 		assert.equal(stallIntent(t), undefined, t);
 });

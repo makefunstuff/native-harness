@@ -35,18 +35,19 @@ export function parseOptions(env: string | undefined): Options {
 
 export const TAG = "[loop-guard]";
 
-// Arguments as a stable string: keys sorted, whitespace runs in strings collapsed, so a retry that
-// only re-indents or re-wraps a command counts as the same call. Bash commands also lose output
-// plumbing that does not change what runs (`2>&1`, a trailing `| head -n 40` / `| tail -20`).
+// Arguments as a stable string: keys sorted. Shell commands (a `command` argument) have their
+// whitespace runs collapsed, so a retry that only re-wraps a command counts as the same call; other
+// strings stay exact (an edit whose old text changed only in indentation is a real change). Bash
+// commands also lose output plumbing that does not change what runs (`2>&1`, `| tail -20`).
 export function callKey(tool: string, args: unknown): string {
-	const norm = (v: unknown): unknown => {
-		if (typeof v === "string") return v.replace(/\s+/g, " ").trim();
-		if (Array.isArray(v)) return v.map(norm);
+	const norm = (v: unknown, key = ""): unknown => {
+		if (typeof v === "string") return key === "command" ? v.replace(/\s+/g, " ").trim() : v;
+		if (Array.isArray(v)) return v.map((x) => norm(x));
 		if (v && typeof v === "object")
 			return Object.fromEntries(
 				Object.keys(v)
 					.sort()
-					.map((k) => [k, norm((v as Record<string, unknown>)[k])]),
+					.map((k) => [k, norm((v as Record<string, unknown>)[k], k)]),
 			);
 		return v;
 	};
@@ -178,7 +179,7 @@ export class LoopGuard {
 const INTENT = /\b(I'll|I will|I'm going to|I am going to|let me|let's|I need to|I should|next,? I|now I|I'm now going to|I now need to)\b/i;
 const LEAD = /^(\W*\b(now|next|okay|ok|great|good|alright|all right|first|then|so|and|finally|perfect|right)\b)*\W*$/i;
 // Closings that are not stalls: offers to the user, wrap-ups, waiting on something, negations.
-const NOT_STALL = /\b(let me know|if you('d| would)? (like|want|need|prefer|rather)|feel free|happy to|should you|would you like|let me summari[sz]e|I'll (stop|leave|wait|keep|watch|stay|report|relay|follow up|check back)|I will (stop|leave|wait|keep|watch|stay|report|relay)|let's (wait|see)|I'll (know|be)|next update|when|once|as soon as|until|unless|(I'll|I will|I should|I'm going to|I am going to) (not|never)|won't|shouldn't)\b/i;
+const NOT_STALL = /\b(let me know|if you('d| would)? (like|want|need|prefer|rather)|feel free|happy to|should you|would you like|let me summari[sz]e|I'll (stop|leave|wait|keep|watch|stay|report|relay|follow up|check back)|I will (stop|leave|wait|keep|watch|stay|report|relay)|let's (wait|see|recap|review|summari[sz]e)|(I'll|I will|I should|I need to|I want to|let me|next,? I) (also )?(note|mention|point out|add that|recap|recommend|suggest|clarify|emphasi[sz]e|stress|highlight)|I recommend|I suggest|I'll (know|be)|next update|when|once|as soon as|until|unless|(I'll|I will|I should|I'm going to|I am going to) (not|never)|won't|shouldn't)\b/i;
 
 /** The announced action the text ends on ("I'll run the tests"), or undefined. */
 export function stallIntent(text: string): string | undefined {
