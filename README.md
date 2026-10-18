@@ -8,7 +8,7 @@ extension on or off on its own.
 
 | extension | what it does | status |
 |---|---|---|
-| _coming soon_ | the first extensions are being written | |
+| [`loop-guard`](extensions/loop-guard/README.md) | notices blind retries of a failed tool call, repeated no-progress calls and runs that stop on "I'll …" with no tool call, and appends a short correction (never rewrites history, so the prompt cache stays) | stable |
 | [`llama-native`](experimental/llama-native/README.md) | runs llama.cpp inside pi's own process as a model provider (`llama-native/…`); needs a llama.cpp build and a native addon you compile, does nothing without it. Results: [RESULTS.md](experimental/llama-native/RESULTS.md) | **experimental** |
 
 Each extension lives in its own folder under `extensions/<name>/` with its own README;
