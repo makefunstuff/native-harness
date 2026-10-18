@@ -51,6 +51,11 @@ def main():
     labels = sys.argv[1:] or sorted(os.path.basename(p)[:-6] for p in glob.glob(os.path.join(HERE, "results", "*.jsonl")))
     for label in labels:
         rows = [json.loads(l) for l in open(os.path.join(HERE, "results", f"{label}.jsonl"))]
+        # runs cut short by a provider error were run again; keep the last row per run
+        last = {}
+        for r in rows:
+            last[(r["arm"], r.get("scenario", r["task"]), r["round"])] = r
+        rows = [r for r in last.values() if not r.get("provider_error")]
         if rows and "scenario" in rows[0]:
             inject_report(label, rows)
             continue

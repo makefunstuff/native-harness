@@ -54,6 +54,8 @@ def make_agent_copy():
     keep = lambda x: not re.search(r"pi-extras|native-harness", x if isinstance(x, str) else (x or {}).get("source", ""))
     s["packages"] = [x for x in s.get("packages", []) if keep(x)]
     s["extensions"] = [x for x in s.get("extensions", []) if keep(x)]
+    # a shared local server can queue a request for minutes before the first byte
+    s["httpIdleTimeoutMs"] = 1_800_000
     json.dump(s, open(p, "w"), indent=2)
 
 
@@ -127,6 +129,17 @@ def session_counts(sess):
     return c
 
 
+def provider_error(sess):
+    """The run ended on a provider error (a timeout, a server error), not on the model's choice."""
+    last = None
+    for f in glob.glob(os.path.join(sess, "*.jsonl")):
+        for line in open(f):
+            m = json.loads(line).get("message") or {}
+            if m.get("role") == "assistant":
+                last = m
+    return bool(last and last.get("stopReason") == "error")
+
+
 def replay(sess):
     p = subprocess.run(["node", os.path.join(HERE, "replay.mjs"), sess, "--json"], capture_output=True, text=True)
     if p.returncode != 0:
@@ -168,7 +181,7 @@ def run(args, arm, ticket, rnd):
     except Exception as e:  # a grader crash is a failed run, not a crashed benchmark
         passed, tail = False, f"grader error: {e}"
     row = {"label": args.label, "model": args.model, "arm": arm, "task": ticket.name, "round": rnd, "passed": passed,
-           "wall_s": wall, "agent_rc": rc, "timed_out": timed_out, **replay(sess), **session_counts(sess),
+           "wall_s": wall, "agent_rc": rc, "timed_out": timed_out, "provider_error": provider_error(sess), **replay(sess), **session_counts(sess),
            "grade_tail": tail[-300:], "stderr_tail": err_tail}
     shutil.rmtree(work, ignore_errors=True)
     return row
@@ -197,7 +210,8 @@ def main():
     out = os.path.join(RESULTS, f"{args.label}.jsonl")
     done = set()
     if os.path.exists(out):
-        done = {(r["arm"], r["task"], r["round"]) for r in map(json.loads, open(out))}
+        # runs cut short by a provider error are run again
+        done = {(r["arm"], r["task"], r["round"]) for r in map(json.loads, open(out)) if not r.get("provider_error")}
     arms = args.arms.split(",")
     # one append per row: the file may be replaced (a checkout or stash) while a run goes on
     for rnd in range(1, args.rounds + 1):

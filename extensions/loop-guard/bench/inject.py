@@ -177,7 +177,7 @@ def main():
     out = os.path.join(bench.RESULTS, f"{args.label}.jsonl")
     done = set()
     if os.path.exists(out):
-        done = {(r["arm"], r["scenario"], r["round"]) for r in map(json.loads, open(out))}
+        done = {(r["arm"], r["scenario"], r["round"]) for r in map(json.loads, open(out)) if not r.get("provider_error")}
     run_args = argparse.Namespace(label=args.label, model=f"inject/{args.model}", thinking=args.thinking, timeout=args.timeout)
     # one append per row: the file may be replaced (a checkout or stash) while a run goes on
     for rnd in range(1, args.rounds + 1):
