@@ -24,7 +24,7 @@ extensions, skills, MCP), run on a copy of `~/.pi/agent`.
   in-process `fetch` → Node-API binding of libllama (`native/`, `extension/llama-native/`).
 
 Tickets: the six from homelab `evals/agentic-glimmer-2026-10-14` plus a 12-module API rename,
-graded by hidden tests, `:medium` thinking. Raw data: `results/raw/`, tables:
+graded by hidden tests, `:medium` thinking. Raw data: `results/raw/*.jsonl` and `results/raw-artifacts.tar.xz`, tables:
 `results/summary.md`, `results/uncertainty.md`, `results/microbench/`.
 
 ## Does it work end to end?

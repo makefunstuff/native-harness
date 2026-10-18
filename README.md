@@ -112,7 +112,8 @@ Needs a built llama.cpp checkout with shared libraries (`-DBUILD_SHARED_LIBS=ON`
 
 ```bash
 make -C native LLAMA_DIR=/data/src/llama.cpp-master-77c4540ce      # -> native/build/llama_native.node
-node scripts/smoke.mjs                                               # load, one tool call, one decision
+node scripts/smoke.mjs                                               # load, one tool call, one decision (GPU)
+scripts/check.sh                                                     # repository check, no GPU
 ```
 
 `LLAMA_BUILD` (default `$LLAMA_DIR/build-cuda`) points at the build directory. The addon is linked
@@ -187,9 +188,12 @@ python3 bench/report.py           # -> results/summary.md
   never the shared router; `bench/watchdog.sh` stops everything if the router gets a request.
   `scripts/gpu-check.sh` refuses to start a model unless both GPUs are free.
 
-Raw results are in `results/raw/` and `results/microbench/` (one JSONL row per run, plus the diff and the per-request
-metrics of every run). The pi sessions stay in `~/.cache/native-harness/sessions`: they contain the full system prompt
-and tool output, including memory recalls, so they are not published.
+Raw results: `results/raw/<arm>.jsonl` (one row per run) and `results/microbench/`. The per-run
+artifacts (the final diff, per-request metrics and llama.cpp log of every run) are packed in
+`results/raw-artifacts.tar.xz`; `tar -xJf results/raw-artifacts.tar.xz -C results/raw` restores
+`results/raw/<arm>/`, which `bench/uncertainty.py` and `bench/regrade.py` read. The pi sessions stay in
+`~/.cache/native-harness/sessions`: they contain the full system prompt and tool output, including memory recalls,
+so they are not published.
 
 ## Layout
 

@@ -4,6 +4,8 @@ for every generated token) predict that the turn's tool call fails, or that the 
 
 Joins each native run's per-request metrics (entropy) with its pi session (tool results) in order,
 and reports ROC AUC of several entropy statistics. Writes results/uncertainty.md.
+
+Needs results/raw/<arm>/ (tar -xJf results/raw-artifacts.tar.xz -C results/raw).
 """
 import glob, json, os
 

@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 bench/work/
 results/raw/**/*.session/
+results/raw/*/

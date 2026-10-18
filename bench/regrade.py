@@ -4,6 +4,8 @@ the final tree from the task repo + the run's saved diff and run the hidden test
 Rewrites the rows in results/raw/<arm>.jsonl in place (marks them "regraded": reason).
 
 usage: bench/regrade.py [PATTERN]   (default: rows whose hidden_tail mentions "No space left")
+
+Needs results/raw/<arm>/ (tar -xJf results/raw-artifacts.tar.xz -C results/raw).
 """
 import glob, json, os, shutil, subprocess, sys, tempfile
 
