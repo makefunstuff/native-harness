@@ -21,4 +21,7 @@ export default {
 		assert.match(stdout, /tool said OK/);
 	},
 	model: MOCK_MODEL,
+	// optional: mockModel overrides the mock's models.json entry (e.g. { reasoning: true }), mock passes
+	// options to startMockModel (e.g. { props } to answer /props like llama.cpp), env adds variables,
+	// and respond() may return { reasoning } to stream reasoning_content (see test/lib/harness.mjs)
 };
