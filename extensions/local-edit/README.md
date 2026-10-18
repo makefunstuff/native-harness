@@ -14,7 +14,7 @@ local-edit replaces the built-in `edit`. It reuses pi's implementation
 
 | | what it does |
 |---|---|
-| **tolerant matching** | when `oldText` is not found exactly (or by pi's own fuzzy match), it is placed when exactly one spot fits: 1. the same text with literal `\n`/`\t` decoded; 2. the same lines with indentation ignored; 3. a window of whole lines (same count, ±1) that is **≥ 0.95 similar** (Levenshtein ratio on whitespace-normalised text), with no other non-overlapping window reaching 0.95, and first and last lines that each look alike (≥ 0.8), so a partial line is not swallowed; a one-line `oldText` may also match part of a line. `newText` is re-indented from the model's indentation to the file's. Two or more candidates means no edit, and the error lists their line numbers. |
+| **tolerant matching** | when `oldText` is not found exactly (or by pi's own fuzzy match), it is placed when exactly one spot fits: 1. the same text with literal `\n`/`\t` decoded; 2. the same lines with indentation ignored; 3. a window of whole lines (same count, ±1) that is **≥ 0.95 similar** (Levenshtein ratio on whitespace-normalised text), with no other non-overlapping window reaching 0.95, and first and last lines that each look alike (≥ 0.8), so a partial line is not swallowed; a one-line `oldText` may also match part of a line. `newText` is re-indented from the model's indentation to the file's. Two or more candidates means no edit, and the error lists their line numbers. A loose match never writes the model's stale text back. Where `oldText` misremembers a line that the edit does not change, the file's text is kept, and the result says at which line. The edit is refused when it changes the misremembered text itself, or when `oldText` leaves out a line of the file or has one the file does not have there. |
 | **clear failures** | on a miss, the closest candidate lines with line numbers and their similarity, instead of "Could not find the exact text". For a long `oldText` it also gives the line numbers of its first and last lines. It names the edit of the same call that writes the text a later edit looks for (all edits of a call are matched against the original file). It names the other file that contains the text, if any. Duplicates are reported with the line numbers of each occurrence. |
 | **compact diff** | every successful edit returns a diff of the removed (`-`) and added (`+`) lines with line numbers and one line of context, capped at 60 lines. It warns when 3 or more non-blank lines were removed and not put back, or when `newText` contains a placeholder such as `// ... rest unchanged`. |
 | **path repair** | `path#tag`, `path:12`, `path:12-30`, `a/`/`b/` diff prefixes, and a basename or partial path, used when exactly one file under the working directory matches. Several matches: an error that lists them. |
@@ -41,8 +41,12 @@ and for a miss:
 ```
 Could not find the text in pkg/calc.py: no exact match, and no unique match at ≥95% similarity.
 Closest text in the file:
-line 5 (55% similar):
+line 5 (57% similar):
 5|     return s
+line 1 (36% similar):
+1| def total(xs):
+line 3 (36% similar):
+3|     for x in xs:
 Copy oldText exactly from these lines (without the "N| " prefixes), or read the file again.
 ```
 
@@ -62,7 +66,113 @@ filter. To try it for one run: `pi -e ./extensions/local-edit/index.ts`.
 
 ## Results
 
-RESULTS_PLACEHOLDER
+Measured on 2026-10-19 with pi 1.3.0. Two measurements: an offline replay of real sessions,
+and a live bench through pi's SDK. Both are TypeScript: `bench/replay.mjs`, and
+`bench/run.ts` with `bench/report.ts`. The local 27B part of the live bench is **not done
+yet** (see *Local 27B: pending* below).
+
+### 1. Replay of real sessions
+
+`node extensions/local-edit/bench/replay.mjs` reads pi sessions on this machine:
+`~/.pi/agent/sessions`, plus the plain-ticket bench sessions of the llama-native, d3-context and
+verify-gate experiments. It leaves out the trap tickets of loop-guard and thinking-guard, which
+fail edits on purpose. For every edit call it rebuilds the file as the model saw it: from a full
+`read`, a `cat FILE`, or a `write`, with the earlier successful edits applied on top. It then runs
+the call through pi's own edit tool and through local-edit's matcher. Snapshot:
+[`bench/results/replay.json`](bench/results/replay.json).
+
+| | local (llama.cpp) | cloud |
+|---|---:|---:|
+| sessions / edit calls | 22 / 86 | 264 / 279 |
+| failed edits with pi's edit | 8 (9.3 %) | 4 (1.4 %) |
+| … of which the file content could be rebuilt | 5 | 2 |
+| … placed by local-edit | 1 (98.9 % similar, a typo in a 28-line `oldText`) | 0 |
+| … still refused, with a better message | 4 | 2 |
+| successful edits replayed: same file with local-edit | 35 / 35 | 94 / 94 |
+| **edit error rate** | **9.3 % → 8.1 %** | 1.4 % → 1.4 % |
+
+The refusals are right to refuse:
+- `oldText` lines that are not in the file at all (the model made them up).
+- A stale view of a file; local-edit now shows the right spot at 77 % similarity.
+- An edit for the wrong file. local-edit names the file that contains the text, when there is one.
+- An `edits[2]` that looks for text that `edits[0]` of the same call writes. local-edit now says
+  exactly that.
+- A duplicate. local-edit gives the line numbers of both places.
+
+None of the 129 successful edits changes outcome under local-edit. The sample is small, and only
+5 of the 8 local failures could be rebuilt, so read 9.3 % → 8.1 % as a direction, not a rate.
+These sessions include none of the basename or `path#tag` failures that the findings doc counts
+in OMP's hashline sessions. The tree those OMP sessions edited has changed since, so those calls
+cannot be replayed reliably and are not counted.
+
+### 2. Live bench, cloud: DeepSeek Flash
+
+`bench/run.ts` drives pi in-process through `createAgentSession`. It runs on a copy of the pi
+config, with an in-memory session. The local-edit arm loads this extension through
+`DefaultResourceLoader`; the base arm uses pi's own edit. The tickets are the three edit-heavy
+TypeScript tickets in `bench/tasks/` (`gen-tasks.ts`):
+- `edit-handlers`: a 570-line module of 16 near-identical classes.
+- `edit-tabs`: a tab-indented module.
+- `edit-table`: a table of long lines.
+
+Hidden `node:test` tests grade the behaviour, and also fail when a function or method the ticket
+did not ask to change was changed or removed (the destructive-edit check). Each arm ran
+6 rounds × 3 tickets: [`bench/results/`](bench/results/summary.md).
+
+| arm | runs | hidden tests pass | edit calls | edit errors | placed loosely | untouched-code check failed | edits dropping ≥ 3 lines |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| base (pi's edit) | 18 | 18/18 | 30 | 1 (3.3 %) | – | 0/18 | 3 |
+| local-edit | 18 | 18/18 | 24 | 0 | 0 | 0/18 | 1 |
+
+What this shows:
+- **No regression.** Pass rate, edit counts and wall time (median 11 s vs 10 s) are the same.
+- **The bench cannot tell the arms apart on errors.** DeepSeek Flash almost never misses an edit.
+  The one baseline error was malformed JSON arguments, which pi rejects before any edit code runs,
+  so it says nothing about either arm.
+- **The 3+-line drops were not destroyed code.** I read all four: each is a deliberate rewrite of
+  the model's own test.
+- **Claude was not measured.** In the first version of this bench, Claude Sonnet 5.5 made no
+  `edit` calls at all (it edits through bash scripts), so it was left out.
+
+### 3. Behaviour checks
+
+These are unit tests in `index.test.ts`, plus the review probes. Things that pi's own edit
+rejects, and local-edit places correctly:
+- wrong indentation;
+- tabs vs spaces, re-indented to the file's style;
+- a one-character typo in a multi-line block;
+- a typo inside a line that contains a literal `\n`;
+- double-escaped `\n`;
+- a basename path, `path#tag` and `path:12-14`.
+
+Things it refuses on purpose:
+- an `oldText` that misremembers a value the edit then changes;
+- a block with a line left out;
+- two equally good places.
+
+When `oldText` misremembers a value the edit does *not* change (`timeout: 30` for a file's
+`300`), it keeps the file's value and says so. It never writes the model's stale copy back.
+
+### Local 27B: pending
+
+The router was taken for the HML-2 trial before the local runs finished. No local model was used
+after that. A separate task runs these:
+
+```bash
+cd extensions/local-edit/bench
+node run.ts local-base       --model llama.cpp/qwen3.8-27b:medium --edit base       --rounds 6
+node run.ts local-local-edit --model llama.cpp/qwen3.8-27b:medium --edit local-edit --rounds 6
+node report.ts
+# or: ./run-all.sh local 6   (same runs, rounds alternating between the arms)
+```
+
+- **Done:** `edit-handlers` r1 and `edit-table` r1 in both arms (4 runs, in
+  `bench/results/local-*.jsonl`): all passed, 8 edit calls, no edit errors.
+- **To do (32 runs):** in `local-base` and in `local-local-edit`, `edit-tabs` r1, then all three
+  tickets for rounds 2–6.
+- The runner resumes, so the runs that are done are skipped.
+- After that, re-run `replay.mjs` for the new local sessions, and fill in this section: edit
+  error rate, loose placements, untouched-code failures and pass rate per arm.
 
 ## Files
 
@@ -72,6 +182,7 @@ RESULTS_PLACEHOLDER
 - `paths.ts`: path repair, and the search for the text in other files.
 - `index.test.ts`: unit tests. `local-edit.smoke.mjs`: an end-to-end `pi -p` run with the
   package installed from git, against the mock model.
-- `bench/`: `run.py` and `run-all.sh` (live tickets), `replay.mjs` (offline replay of real
-  sessions), `gen_tasks.py` (the edit-heavy tickets in `bench/tasks/`), `report.py`, and the
-  `results/`.
+- `bench/`: `run.ts` (the live bench, on pi's SDK), `run-all.sh`, `report.ts`, `replay.mjs`
+  (offline replay of real sessions), `gen-tasks.ts` (the TypeScript tickets in `bench/tasks/`),
+  `selftest.ts` (run by `scripts/check.sh`: tickets reproducible, originals fail, references
+  pass), and the `results/`.

@@ -1,7 +1,7 @@
 {
  "local": {
-  "sessions": 20,
-  "edits": 82,
+  "sessions": 22,
+  "edits": 86,
   "failed": 8,
   "failedKnown": 5,
   "unreliable": 0,
@@ -16,13 +16,13 @@
   },
   "pathFailed": 0,
   "pathRecovered": 0,
-  "okKnown": 32,
-  "okSame": 32,
+  "okKnown": 35,
+  "okSame": 35,
   "okDifferent": 0
  },
  "cloud": {
-  "sessions": 233,
-  "edits": 277,
+  "sessions": 264,
+  "edits": 279,
   "failed": 4,
   "failedKnown": 2,
   "unreliable": 0,
@@ -35,8 +35,8 @@
   },
   "pathFailed": 0,
   "pathRecovered": 0,
-  "okKnown": 92,
-  "okSame": 92,
+  "okKnown": 94,
+  "okSame": 94,
   "okDifferent": 0
  }
 }
