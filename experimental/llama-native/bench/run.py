@@ -9,7 +9,7 @@ For llama.cpp the baseline server and logging proxy must be running (scripts/bas
 for llama-native nothing may hold the GPUs (pi loads the model itself, once per task process).
 
 Writes results/raw/<ARM>/<task>-r<k>.{metrics.jsonl,diff,stderr} (pi sessions go to
-~/.cache/native-harness/sessions, outside the repo) and appends one row per run to
+~/.cache/pi-extras/llama-native/sessions, outside the repo) and appends one row per run to
 results/raw/<ARM>.jsonl (resumable: finished task/round pairs are skipped).
 """
 import argparse, glob, json, os, shutil, subprocess, sys, threading, time
@@ -18,16 +18,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 TASKS = os.path.join(HERE, "tasks")
 RAW = os.path.join(REPO, "results", "raw")
-WORK = os.path.expanduser("~/.cache/native-harness/work")
-RUN = os.path.expanduser("~/.cache/native-harness/run")
+WORK = os.path.expanduser("~/.cache/pi-extras/llama-native/work")
+RUN = os.path.expanduser("~/.cache/pi-extras/llama-native/run")
 # pi sessions hold the full system prompt and tool output (incl. memory recalls): kept out of the repo
-SESS = os.path.expanduser("~/.cache/native-harness/sessions")
+SESS = os.path.expanduser("~/.cache/pi-extras/llama-native/sessions")
 TIMEOUT = 1800
 PREAMBLE = ("You are working autonomously in this repository; nobody will answer questions. "
             "Read the code, make the change, run the tests, and stop when the work is done.\n\n")
 
 
-TMP = os.path.expanduser("~/.cache/native-harness/tmp")  # not the shared /tmp tmpfs
+TMP = os.path.expanduser("~/.cache/pi-extras/llama-native/tmp")  # not the shared /tmp tmpfs
 
 
 def sh(cmd, cwd, timeout=180):

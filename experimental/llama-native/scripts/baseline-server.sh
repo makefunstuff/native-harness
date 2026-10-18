@@ -8,17 +8,17 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 LLAMA_BIN=${LLAMA_BIN:-/data/src/llama.cpp-master-77c4540ce/build-cuda/bin}
 PORT=${PORT:-18182}
-RUN_DIR=${RUN_DIR:-$HOME/.cache/native-harness/run}
+RUN_DIR=${RUN_DIR:-$HOME/.cache/pi-extras/llama-native/run}
 mkdir -p "$RUN_DIR"
 "$REPO/scripts/gpu-check.sh"
 mapfile -t ARGS < <(node -e '
   const { readArgs } = require(process.argv[1]);
-  for (const a of readArgs(process.argv[2])) console.log(a);' "$REPO/extension/llama-native/args.cjs" "$REPO/configs/qwen3.8-27b.args")
+  for (const a of readArgs(process.argv[2])) console.log(a);' "$REPO/extension/args.cjs" "$REPO/configs/qwen3.8-27b.args")
 EXTRA=()
 if [ -n "${EXTRA_ARGS_FILE:-}" ]; then
   mapfile -t EXTRA < <(node -e '
     const { readArgs } = require(process.argv[1]);
-    for (const a of readArgs(process.argv[2])) console.log(a);' "$REPO/extension/llama-native/args.cjs" "$EXTRA_ARGS_FILE")
+    for (const a of readArgs(process.argv[2])) console.log(a);' "$REPO/extension/args.cjs" "$EXTRA_ARGS_FILE")
 fi
 "$LLAMA_BIN/llama-server" "${ARGS[@]}" "${EXTRA[@]}" --host 127.0.0.1 --port "$PORT" --alias qwen3.8-27b \
   --metrics --timeout 3600 --threads-http 8 --log-colors off --log-file "$RUN_DIR/server.log" \

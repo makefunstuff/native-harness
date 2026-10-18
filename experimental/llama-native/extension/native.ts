@@ -24,7 +24,7 @@ let pending: Promise<Native> | undefined;
 let pendingHelper: Promise<Native> | undefined;
 
 export function defaultAddon(): string {
-	return process.env.LLAMA_NATIVE_ADDON ?? join(HERE, "../../native/build/llama_native.node");
+	return process.env.LLAMA_NATIVE_ADDON ?? join(HERE, "../native/build/llama_native.node");
 }
 
 // the main model; a second sequence is needed for decisions / summaries on a fork of the cache

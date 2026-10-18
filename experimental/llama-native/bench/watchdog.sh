@@ -6,9 +6,9 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 SINCE=$(date '+%Y-%m-%d %H:%M:%S')
 while kill -0 "$MATRIX" 2>/dev/null; do
   if journalctl -u local-ai-router --since "$SINCE" --no-pager -o cat 2>/dev/null | grep -qE "proxying request|exiting sleeping state"; then
-    echo "$(date) router activity: stopping the benchmark" | tee -a "$HOME/.cache/native-harness/run/watchdog.log"
+    echo "$(date) router activity: stopping the benchmark" | tee -a "$HOME/.cache/pi-extras/llama-native/run/watchdog.log"
     pkill -P "$MATRIX"; kill "$MATRIX"
-    pkill -f "pi-agent.*--session-dir" ; pkill -f "native-harness/work" 
+    pkill -f "pi-agent.*--session-dir" ; pkill -f "pi-extras/llama-native/work" 
     "$REPO/scripts/baseline-down.sh"
     exit 1
   fi

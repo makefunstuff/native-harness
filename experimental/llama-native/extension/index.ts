@@ -7,13 +7,13 @@
 // and what runs behind it differ.
 //
 // Configuration (environment):
-//   LLAMA_NATIVE_ARGS     llama-server style argument file (default: ../../configs/qwen3.8-27b.args)
-//   LLAMA_NATIVE_ADDON    path of llama_native.node (default: ../../native/build/llama_native.node)
+//   LLAMA_NATIVE_ARGS     llama-server style argument file (default: ../configs/qwen3.8-27b.args)
+//   LLAMA_NATIVE_ADDON    path of llama_native.node (default: ../native/build/llama_native.node)
 //   LLAMA_NATIVE_MODEL    model id to mirror from the llama.cpp provider in models.json (default qwen3.8-27b)
 //   LLAMA_NATIVE_EXP      comma-separated experiments, see experiments.ts
 //   LLAMA_NATIVE_METRICS  JSONL file for per-request metrics (or a file named in "<path>.target")
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
+import { streamSimple as streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -141,10 +141,10 @@ async function nativeFetch(input: any, init?: any): Promise<Response> {
 }
 
 function argsFile(): string {
-	return process.env.LLAMA_NATIVE_ARGS ?? resolve(HERE, "../../configs/qwen3.8-27b.args");
+	return process.env.LLAMA_NATIVE_ARGS ?? resolve(HERE, "../configs/qwen3.8-27b.args");
 }
 function addonPath(): string {
-	return process.env.LLAMA_NATIVE_ADDON ?? resolve(HERE, "../../native/build/llama_native.node");
+	return process.env.LLAMA_NATIVE_ADDON ?? resolve(HERE, "../native/build/llama_native.node");
 }
 
 export default function (pi: ExtensionAPI) {
