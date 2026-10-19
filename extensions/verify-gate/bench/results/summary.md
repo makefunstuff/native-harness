@@ -11,14 +11,14 @@
 | deepseek-told-base | deepseek/deepseek-flash | 33 | 33/33 (100%) | 0 | 0/33 (0%) | 0 | 0/0 | 0 | 18 | 6 | 3413 |
 | deepseek-told-gate | deepseek/deepseek-flash | 33 | 32/33 (97%) | 0 | 1/33 (3%) | 0 | 0/0 | 0 | 18 | 7 | 3635 |
 | local-27b-plain-base | llama.cpp/qwen3.8-27b:medium | 11 | 10/11 (91%) | 0 | 1/11 (9%) | 0 | 0/0 | 0 | 67 | 9 | 7773 |
-| local-27b-plain-gate | llama.cpp/qwen3.8-27b:medium | 5 | 5/5 (100%) | 0 | 0/5 (0%) | 0 | 0/0 | 0 | 52 | 7 | 3875 |
+| local-27b-plain-gate | llama.cpp/qwen3.8-27b:medium | 8 | 8/8 (100%) | 0 | 0/8 (0%) | 0 | 0/0 | 0 | 53 | 8 | 8807 |
 
 Prompt cache (local model: share of prompt tokens the server did not have to re-read):
 
 | arm | prompt tokens from cache, all requests | requests right after a gate message: from cache |
 |---|---|---|
 | local-27b-plain-base | 94% | – |
-| local-27b-plain-gate | 91% | – |
+| local-27b-plain-gate | 95% | – |
 
 Hidden tests passed, per task:
 
@@ -29,9 +29,9 @@ Hidden tests passed, per task:
 | config-rename | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
 | duration | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
 | event-reconcile | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| isoweek | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
-| logstats | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
-| presets-ini | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
+| isoweek | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
+| logstats | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
+| presets-ini | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
 | schedule-repair | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
 | sqlite-migration | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
 | ttlcache | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |

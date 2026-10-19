@@ -131,23 +131,25 @@ What this shows:
   (`verify-gate.smoke.mjs`): the check fails, the agent goes back, history is only appended to,
   the check passes, and the run ends.
 
-### Local 27B: pending (partial: ~16/132, stopped for Strata)
+### Local 27B: pending (partial: 19/132, local runs now only at night)
 
 These are partial numbers, not a result. On 2026-10-19 the `local-27b-plain` series was stopped
 after 16 of its 132 runs: the GPUs were reserved for Strata (HML-4) and the router model was
-unloaded. HRN-13 does the full local runs after HML-4. What finished, `plain` prompt, round 1 only:
+unloaded. HRN-13 resumed them and added 3 gate-arm runs before local GPU work moved to the night
+(00:00-08:00); it continues there. What finished, `plain` prompt, round 1 only:
 
 | arm | runs | hidden tests pass | own check green, hidden red | gate checks / failures | mean wall s |
 |---|---|---|---|---|---|
 | local-27b-plain-base | 11 of 33 | 10/11 | 1 (api-migration) | – | 114.0 |
-| local-27b-plain-gate | 5 of 33 | 5/5 | 0 | 5 / 0 | 55.0 |
+| local-27b-plain-gate | 8 of 33 | 8/8 | 0 | 8 / 0 | 130.1 |
 
 - The base-arm miss is the self-confirming case, again on api-migration: its own tests passed, the
   hidden test failed (actual 0, expected 30000). The project's check was green, so the gate would
   not have caught it. Only the prompt line can.
 - The gate never sent the agent back in these runs, so the prompt-cache table (the request right
   after a gate message) has no local data yet.
-- Too few runs to compare the arms. The gate arm has the five tickets that came first in order.
+- Too few runs to compare the arms. The gate arm has the eight tickets that came first in order
+  (`schedule-repair`, `sqlite-migration` and `ttlcache` r1 are next).
 - The earlier tries failed for other reasons. They shared the single-slot router with three other
   benchmarks, their requests hit pi's 5-minute timeout, and none finished. After that, the HML-2
   Strata trial kept local models off.
@@ -159,7 +161,7 @@ unloaded. HRN-13 does the full local runs after HML-4. What finished, `plain` pr
   3. The prompt-cache table in `bench/results/summary.md`: the share of prompt tokens read from
      cache on the request right after a gate message, against all requests. This checks on the
      hybrid model that the appended message keeps its cache.
-  4. Put the rows into the table above, and update the reading. The 16 partial runs in
+  4. Put the rows into the table above, and update the reading. The 19 partial runs in
      `bench/results/local-27b-plain-*.jsonl` count toward step 1 (`run.ts` resumes and skips runs it already has).
 - **Optional, also pending:** the remaining Claude runs (`presets-ini` and `sqlite-migration`,
   4 arms × 3 rounds), once the Anthropic key works again.
