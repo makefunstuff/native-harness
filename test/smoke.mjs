@@ -8,7 +8,8 @@
 //      pi answers a prompt with no extension errors;
 //   2. the experimental llama-native extension loads its provider code in that install (with a
 //      stand-in addon file: the addon itself is only opened on the first request);
-//   3. every *.smoke.mjs spec in the repo (see templates/extension/template.smoke.mjs).
+//   3. every *.smoke.mjs spec in the repo (see templates/extension/template.smoke.mjs); a file may
+//      export one spec or an array of them.
 //
 // Environment: PI_EXTRAS_SMOKE_CONFIG=copy|empty (default: copy if ~/.pi/agent exists),
 // PI_EXTRAS_SMOKE_SOURCE (config to copy), PI_BIN (pi binary), PI_EXTRAS_SMOKE_MCP=1 (keep MCP),
@@ -51,8 +52,8 @@ function findSpecs() {
 
 async function runSpec(spec) {
 	const realModel = spec.realModel;
-	const mock = realModel ? null : await startMockModel(spec.respond);
-	const agent = makeAgentDir({ mockUrl: mock?.url, extensions: spec.extensions });
+	const mock = realModel ? null : await startMockModel(spec.respond, spec.mock);
+	const agent = makeAgentDir({ mockUrl: mock?.url, mockModel: spec.mockModel, extensions: spec.extensions });
 	const cwd = spec.cwd?.(); // a throw-away working directory the spec prepared, removed afterwards
 	try {
 		const res = await runPi(agent, ["-p", "--model", realModel ?? spec.model ?? MOCK_MODEL, ...(spec.args ?? []), spec.prompt], { timeoutMs: spec.timeoutMs, env: spec.env, cwd });
@@ -106,8 +107,8 @@ if (!realModel) {
 		}
 	});
 	for (const file of findSpecs()) {
-		const spec = (await import(pathToFileURL(file).href)).default;
-		await check(`${relative(REPO, file)}: ${spec.name ?? ""}`, () => runSpec(spec));
+		const specs = (await import(pathToFileURL(file).href)).default;
+		for (const spec of [specs].flat()) await check(`${relative(REPO, file)}: ${spec.name ?? ""}`, () => runSpec(spec));
 	}
 }
 

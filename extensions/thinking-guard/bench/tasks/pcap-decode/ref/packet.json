@@ -1,0 +1,1 @@
+{"src_mac": "a4:bb:6d:10:e2:f1", "dst_mac": "3c:52:82:a1:b2:c4", "src_ip": "192.0.2.40", "dst_ip": "198.51.100.53", "ttl": 64, "protocol": "udp", "src_port": 51515, "dst_port": 53, "ip_checksum_ok": false, "ip_checksum_correct": "0x31d7", "udp_checksum_ok": true, "dns_id": "0x4d2a", "dns_query": "build.example.org"}

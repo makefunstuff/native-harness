@@ -24,16 +24,26 @@ const GITHUB_URL = "https://github.com/makefunstuff/pi-extras";
 
 // respond(body, n) is called for every chat request (n counts from 0) and returns
 //   { content: "text" }                                        a plain answer, or
-//   { toolCalls: [{ name, arguments: {...} }], content? }      tool calls.
-// Every request body is kept in `requests`.
-export async function startMockModel(respond) {
+//   { toolCalls: [{ name, arguments: {...} }], content? }      tool calls;
+//   either may add { reasoning: "text" }, streamed first as reasoning_content (llama.cpp style) in
+//   pieces of `reasoningChunk` characters (default 1000) with `delayMs` between them; the stream
+//   stops early when the client hangs up (`aborted` lists the request numbers it happened to).
+// Every request body is kept in `requests`. `options.props`: the body of GET /props (what a
+// llama.cpp server answers there); without it /props is a 404.
+export async function startMockModel(respond, options = {}) {
 	const requests = [];
+	const aborted = [];
 	const server = createServer(async (req, res) => {
 		let body = "";
 		for await (const chunk of req) body += chunk;
 		if (req.method === "GET" && req.url.endsWith("/models")) {
 			res.writeHead(200, { "content-type": "application/json" });
 			res.end(JSON.stringify({ object: "list", data: [{ id: "mock", object: "model" }] }));
+			return;
+		}
+		if (req.method === "GET" && req.url.endsWith("/props") && options.props) {
+			res.writeHead(200, { "content-type": "application/json" });
+			res.end(JSON.stringify(options.props));
 			return;
 		}
 		if (!req.url.endsWith("/chat/completions")) {
@@ -56,6 +66,19 @@ export async function startMockModel(respond) {
 		const send = (delta, finish = null, extra = {}) =>
 			res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta, finish_reason: finish }], ...extra })}\n\n`);
 		send({ role: "assistant" });
+		if (answer.reasoning) {
+			let gone = false;
+			res.on("close", () => (gone = !res.writableFinished));
+			const step = answer.reasoningChunk ?? 1000;
+			for (let i = 0; i < answer.reasoning.length && !gone; i += step) {
+				send({ reasoning_content: answer.reasoning.slice(i, i + step) });
+				if (answer.delayMs) await new Promise((ok) => setTimeout(ok, answer.delayMs));
+			}
+			if (gone) {
+				aborted.push(n);
+				return;
+			}
+		}
 		if (answer.content) send({ content: answer.content });
 		(answer.toolCalls ?? []).forEach((c, i) =>
 			send({ tool_calls: [{ index: i, id: `call_${n}_${i}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments ?? {}) } }] }),
@@ -66,7 +89,7 @@ export async function startMockModel(respond) {
 	});
 	await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 	const url = `http://127.0.0.1:${server.address().port}/v1`;
-	return { url, requests, close: () => new Promise((ok) => server.close(ok)) };
+	return { url, requests, aborted, close: () => new Promise((ok) => { server.closeAllConnections?.(); server.close(ok); }) };
 }
 
 // Messages of a request with a given role, as plain text.
@@ -147,7 +170,8 @@ function piEnv(agentDir) {
 // `extensions` filters this package's extensions like a settings entry does (e.g. ["-extensions/x/index.ts"]).
 // `install`: "git" (default) installs with `pi install git:…` from gitSnapshot(); "path" points
 // settings at this checkout (faster, but it resolves imports from the dev node_modules).
-export function makeAgentDir({ mockUrl, mode = configMode(), extensions, install = process.env.PI_EXTRAS_SMOKE_INSTALL ?? "git" } = {}) {
+// `mockModel` overrides fields of the mock model's models.json entry (e.g. { reasoning: true }).
+export function makeAgentDir({ mockUrl, mockModel, mode = configMode(), extensions, install = process.env.PI_EXTRAS_SMOKE_INSTALL ?? "git" } = {}) {
 	const dir = mkdtempSync(join(process.env.PI_EXTRAS_TMP ?? tmpdir(), "pi-extras-agent-"));
 	chmodSync(dir, 0o700);
 	if (mode === "copy") {
@@ -189,7 +213,7 @@ export function makeAgentDir({ mockUrl, mode = configMode(), extensions, install
 			baseUrl: mockUrl,
 			api: "openai-completions",
 			apiKey: "none",
-			models: [{ id: "mock", name: "pi-extras mock", reasoning: false, input: ["text"], contextWindow: 32768, maxTokens: 4096 }],
+			models: [{ id: "mock", name: "pi-extras mock", reasoning: false, input: ["text"], contextWindow: 32768, maxTokens: 4096, ...mockModel }],
 		};
 	}
 	writeFileSync(modelsPath, JSON.stringify(models, null, 2));

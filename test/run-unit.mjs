@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Unit tests: every *.test.ts / *.test.mjs in the extension folders, the template and test/,
-// run with node's test runner (TypeScript through node's type stripping).
+// run with node's test runner (TypeScript through node's type stripping). Benchmark tickets under
+// */bench/tasks/ are left out: their bench grades them.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -12,7 +13,9 @@ const walk = (dir) => {
 	for (const d of readdirSync(dir, { withFileTypes: true })) {
 		// bench tickets hold fixture repos whose tests fail on purpose (verify-gate/bench/selftest.ts runs them)
 		if (d.name === "node_modules" || d.name === "tickets" || d.name.startsWith(".")) continue;
+		if (d.name === "tasks" && dir.endsWith("bench")) continue; // benchmark tickets: graded by their bench, not unit tests
 		const p = join(dir, d.name);
+		if (/[\\/]bench[\\/]tasks$/.test(p)) continue; // benchmark tickets: their tests are graded by the bench
 		if (d.isDirectory()) walk(p);
 		else if (/\.test\.(ts|mjs)$/.test(d.name)) files.push(p);
 	}
