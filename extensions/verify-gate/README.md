@@ -126,18 +126,31 @@ What this shows:
   default 30 000. That is the failure this extension targets, and a green check cannot catch it.
   One miss in 33 against none in 33 is noise.
 - **The case the gate is built for has not been measured.** The local 27B stops with "All done"
-  and failing tests more often in the session analysis. Those runs are still to do (next section).
+  and failing tests more often in the session analysis. Its runs are only partly done (next section).
   Until then, the mechanism is covered by the unit tests and the smoke test
   (`verify-gate.smoke.mjs`): the check fails, the agent goes back, history is only appended to,
   the check passes, and the run ends.
 
-### Local 27B: pending
+### Local 27B: pending (partial: ~16/132, stopped for Strata)
 
-No local numbers yet.
-- **Why.** The first local runs shared the single-slot router with three other benchmarks; their
-  requests hit pi's 5-minute timeout and none finished. Then all local runs were stopped on
-  2026-10-19 for the HML-2 Strata trial, which needs both GPUs and the router. Local models stay
-  off until the owner allows them again.
+These are partial numbers, not a result. On 2026-10-19 the `local-27b-plain` series was stopped
+after 16 of its 132 runs: the GPUs were reserved for Strata (HML-4) and the router model was
+unloaded. HRN-13 does the full local runs after HML-4. What finished, `plain` prompt, round 1 only:
+
+| arm | runs | hidden tests pass | own check green, hidden red | gate checks / failures | mean wall s |
+|---|---|---|---|---|---|
+| local-27b-plain-base | 11 of 33 | 10/11 | 1 (api-migration) | – | 114.0 |
+| local-27b-plain-gate | 5 of 33 | 5/5 | 0 | 5 / 0 | 55.0 |
+
+- The base-arm miss is the self-confirming case, again on api-migration: its own tests passed, the
+  hidden test failed (actual 0, expected 30000). The project's check was green, so the gate would
+  not have caught it. Only the prompt line can.
+- The gate never sent the agent back in these runs, so the prompt-cache table (the request right
+  after a gate message) has no local data yet.
+- Too few runs to compare the arms. The gate arm has the five tickets that came first in order.
+- The earlier tries failed for other reasons. They shared the single-slot router with three other
+  benchmarks, their requests hit pi's 5-minute timeout, and none finished. After that, the HML-2
+  Strata trial kept local models off.
 - **To do**, with nothing else on the router:
   1. `bench/run-all.sh local-27b-plain llama.cpp/qwen3.8-27b:medium 3 plain`: arms
      `local-27b-plain-base` and `-gate`, all 11 tickets, 3 rounds (66 runs).
@@ -146,7 +159,8 @@ No local numbers yet.
   3. The prompt-cache table in `bench/results/summary.md`: the share of prompt tokens read from
      cache on the request right after a gate message, against all requests. This checks on the
      hybrid model that the appended message keeps its cache.
-  4. Put the rows into the table above, and update the reading.
+  4. Put the rows into the table above, and update the reading. The 16 partial runs in
+     `bench/results/local-27b-plain-*.jsonl` count toward step 1 (`run.ts` resumes and skips runs it already has).
 - **Optional, also pending:** the remaining Claude runs (`presets-ini` and `sqlite-migration`,
   4 arms × 3 rounds), once the Anthropic key works again.
 
