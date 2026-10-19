@@ -123,6 +123,43 @@ test("a note deleted here does not come back from Hindsight when the delete fail
 	}
 });
 
+test("a dropped lesson learnt again is live again: recalled from Hindsight, and the pending delete does not remove it", async () => {
+	const h = await fakeHindsight();
+	try {
+		const lib = new Library(new FileStore(dir()), new HindsightStore({ url: h.url, bank: "b", timeoutMs: 5000 }));
+		const f = { cue: "rounding money amounts", lesson: "use roundHalfEven" };
+		const s = await lib.save(makeNote("r", f));
+		h.failDelete(true);
+		await lib.adjust("r", s.note, CONTRADICTED);
+		assert.equal(await lib.adjust("r", lib.files.list("r")[0], CONTRADICTED), "dropped");
+		assert.equal(lib.files.removed("r")[s.note.id].pending, true);
+		h.failDelete(false);
+		const again = await lib.save(makeNote("r", f));
+		assert.equal(again.note.id, s.note.id);
+		assert.equal(lib.files.removed("r")[s.note.id], undefined, "the tombstone is cleared");
+		const rec = await lib.recall("r", "rounding money amounts", 5);
+		assert.deepEqual(rec.candidates.map((c) => [c.note.id, c.source]), [[s.note.id, "hindsight"]]);
+		assert.equal(rec.hindsightHits, 1);
+		assert.ok(h.docs.has(s.note.id), "Hindsight keeps the new copy");
+	} finally {
+		await h.close();
+	}
+});
+
+test("recall says how many candidates came from Hindsight, not only that Hindsight answered", async () => {
+	const h = await fakeHindsight({ failRetain: true }); // writes fail: Hindsight stays empty
+	try {
+		const lib = new Library(new FileStore(dir()), new HindsightStore({ url: h.url, bank: "b", timeoutMs: 5000 }));
+		await lib.save(makeNote("r", { cue: "rounding money amounts", lesson: "use roundHalfEven" }));
+		const rec = await lib.recall("r", "rounding money amounts", 5);
+		assert.equal(rec.source, "hindsight");
+		assert.equal(rec.hindsightHits, 0);
+		assert.deepEqual(rec.candidates.map((c) => c.source), ["file"]);
+	} finally {
+		await h.close();
+	}
+});
+
 test("Library drops notes past their time to live", async () => {
 	const files = new FileStore(dir());
 	const old = { ...makeNote("r", { cue: "old thing", lesson: "x" }), updated: "2020-01-01T00:00:00.000Z" };

@@ -124,6 +124,13 @@ test("FixTracker pairs a failure with a later pass of the same command or any ch
 	piped.onBash("npm test 2>&1 | tail -60", false, "> house-rules\nhouse-rules: 2 problems\n  CHANGELOG.md does not mention `f`", 0);
 	piped.onBash("npm test 2>&1 | tail -60", false, "house-rules: ok\nℹ pass 4\nℹ fail 0", 0);
 	assert.deepEqual(piped.fixes.map((f) => f.failed), ["npm test"], "a pipe hides the exit code; the output does not");
+	const masked = new FixTracker();
+	masked.onBash("npm test; echo $?", false, "ℹ fail 2\n1", 0);
+	masked.onBash("npm test", false, "ℹ pass 4\nℹ fail 0", 0);
+	assert.deepEqual(masked.fixes.map((f) => f.failed), ["npm test"], "a later command hides the exit code; the output does not");
+	const clean = new FixTracker();
+	clean.onBash("npm test && git status", false, "ℹ pass 4\nℹ fail 0", 0);
+	assert.equal(clean.failures, 0);
 	piped.onBash("npm test", false, "ℹ fail 1", 0);
 	assert.equal(piped.failures, 1, "without a pipe the exit code is trusted");
 	const commit = new FixTracker();

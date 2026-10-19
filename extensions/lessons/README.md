@@ -56,6 +56,7 @@ session 2   user: Add applyDiscount(...) in src/ops/discount.ts …
     0.9 one after its third. Confirmed: +0.1.
   - Deleted notes (contradicted, forgotten, evicted) leave a tombstone in the local copy, so
     Hindsight cannot bring them back. A failed Hindsight delete is retried on a later recall.
+    When the same lesson is learnt again, its tombstone is cleared (and a pending delete with it).
   - Unused: notes not written or confirmed for `LESSONS_TTL_DAYS` (180) are dropped.
 - **Per repository.** The key is the origin remote (host/path, credentials stripped), else
   `package.json`'s name, else the folder name (`LESSONS_REPO` overrides it).
@@ -151,6 +152,11 @@ included. The DeepSeek provider reports no cost, so there is no dollar column.)
   - A contradiction costs −0.3 instead of −0.4.
   - Deleted notes leave a tombstone.
   - A commit message or echo that mentions "test" no longer counts as a passing check.
+  - A check whose exit code a later command hides (`npm test; echo $?`) is judged by its output.
+  - Recall rows now say where each candidate came from (`recall.candidates[].source`,
+    `recall.hindsightHits`). `recall.source` only says the Hindsight call worked. In the
+    rows above every `source` is `hindsight`, but with the writes failing the candidates
+    there came from the local copy.
 
   The runs hit the old merge once (dayplan round 3). There, a newer note restating the
   `@example` rule and adding the CHANGELOG rule replaced the older note. That was a superset, so
@@ -193,7 +199,7 @@ command after another, on `llama.cpp/qwen3.8-27b`:
 1. `node extensions/lessons/bench/run.ts base --model llama.cpp/qwen3.8-27b --rounds 4`
 2. `node extensions/lessons/bench/run.ts lessons --model llama.cpp/qwen3.8-27b --rounds 4`, with
    Hindsight writes working. Check that rows carry no `Hindsight write failed` note and that
-   `recall.candidates` come from Hindsight.
+   `recall.hindsightHits` > 0, i.e. candidates with `source: "hindsight"`.
 3. `node extensions/lessons/bench/run.ts lessons-file --model llama.cpp/qwen3.8-27b --rounds 2`
 4. `node extensions/lessons/bench/report.ts > extensions/lessons/bench/results/summary.md`, then
    update the table above (add a local row per arm).

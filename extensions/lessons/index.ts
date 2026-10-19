@@ -178,10 +178,11 @@ export function lessons(pi: ExtensionAPI, config: Config) {
 		const details = {
 			repo,
 			source: rec.source,
+			hindsightHits: rec.hindsightHits,
 			fallback: rec.fallback,
 			judge: j.judge,
 			judgeFallback: j.fallback,
-			candidates: rec.candidates.map((c) => ({ id: c.note.id, score: Math.round(c.score * 1000) / 1000 })),
+			candidates: rec.candidates.map((c) => ({ id: c.note.id, source: c.source, score: Math.round(c.score * 1000) / 1000 })),
 			kept: j.kept.map((c) => ({ id: c.note.id, p: c.p })),
 			usage: j.usage,
 		};

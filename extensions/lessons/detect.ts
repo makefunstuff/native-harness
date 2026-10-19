@@ -80,7 +80,8 @@ export function errorExcerpt(output: string, max = 300): string {
 	return pick.length <= max ? pick : `${pick.slice(0, max - 1)}…`;
 }
 
-// A check whose output says it failed. Used when a pipe (`npm test | tail`) hides the exit code.
+// A check whose output says it failed. Used when a pipe (`npm test | tail`) or a later command
+// (`npm test; echo $?`) hides the exit code.
 const FAILED_OUTPUT = [
 	/^npm (error|ERR!)/m,
 	/^ℹ fail [1-9]/m,
@@ -96,9 +97,12 @@ export function looksFailed(output: string): boolean {
 	return FAILED_OUTPUT.some((r) => r.test(output));
 }
 
-// The pipe sits outside heredoc bodies and quotes, after the check.
-function pipesOutput(command: string): boolean {
-	return /\|(?!\|)/.test(dropHeredocs(command).replace(/'[^']*'|"[^"]*"/g, ""));
+// The exit code is not the check's: a pipe (outside heredoc bodies and quotes) after it, or a
+// later command (`npm test; echo $?`, `npm test || true`).
+function hidesExit(command: string): boolean {
+	if (/\|(?!\|)/.test(dropHeredocs(command).replace(/'[^']*'|"[^"]*"/g, ""))) return true;
+	const segs = segments(command);
+	return segs.length > 0 && !isCheckSegment(segs.at(-1)!);
 }
 
 export class FixTracker {
@@ -117,7 +121,7 @@ export class FixTracker {
 		if (!command.trim() || isSearch(command)) return;
 		const key = commandKey(command);
 		let failed = exitCode !== undefined ? exitCode !== 0 : isError;
-		if (!failed && isCheck(command) && pipesOutput(command) && looksFailed(output)) failed = true;
+		if (!failed && isCheck(command) && hidesExit(command) && looksFailed(output)) failed = true;
 		if (/Command (aborted|timed out)/.test(output) && failed) return; // not a fault of the code
 		if (failed) {
 			this.failures++;

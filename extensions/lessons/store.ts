@@ -189,8 +189,9 @@ export const CONTRADICTED = -0.3;
 export const CONFIRMED = 0.1;
 
 export interface Recall {
-	candidates: Candidate[];
-	source: "hindsight" | "file";
+	candidates: Candidate[]; // each says where it came from (Hindsight, or the local copy's plain-text match)
+	source: "hindsight" | "file"; // which store answered: "hindsight" when the Hindsight call worked, even if none of its hits survived
+	hindsightHits?: number; // how many candidates came from Hindsight
 	fallback?: string; // why Hindsight was not used, when it was configured
 }
 
@@ -262,7 +263,7 @@ export class Library {
 				const seen = new Set(merged.map((c) => c.note.id));
 				merged.push(...ranked.filter((c) => !seen.has(c.note.id)));
 				local = await this.sync(repo, local, signal);
-				return { candidates: merged, source: "hindsight" };
+				return { candidates: merged, source: "hindsight", hindsightHits: merged.filter((c) => c.source === "hindsight").length };
 			} catch (e) {
 				fallback = `Hindsight recall failed (${String((e as Error)?.message ?? e).slice(0, 160)}); using plain-text matching on the local copy`;
 			}
@@ -290,6 +291,15 @@ export class Library {
 		} catch {}
 		this.files.write(repo, notes, removed);
 		return notes;
+	}
+
+	// A note written again after it was deleted (the same lesson learnt again) is live: its
+	// tombstone goes, so recall no longer hides it and a pending Hindsight delete is not retried
+	// (it would delete the new copy).
+	private revive(repo: string, id: string): Record<string, Tombstone> {
+		const removed = this.files.removed(repo);
+		delete removed[id];
+		return removed;
 	}
 
 	// Write a note to Hindsight; the local copy remembers whether that worked.
@@ -344,8 +354,9 @@ export class Library {
 			await this.remove(fresh.repo, notes, [note.id], signal);
 			return { note, action, evicted };
 		}
+		const removed = this.revive(fresh.repo, note.id);
 		await this.push(note, signal);
-		this.files.write(fresh.repo, notes);
+		this.files.write(fresh.repo, notes, removed);
 		if (evicted.length) await this.remove(fresh.repo, notes, evicted, signal);
 		return { note, action, evicted };
 	}
@@ -365,8 +376,9 @@ export class Library {
 		}
 		if (i >= 0) notes[i] = next;
 		else notes.push(next);
+		const removed = this.revive(repo, next.id);
 		await this.push(next, signal);
-		this.files.write(repo, notes);
+		this.files.write(repo, notes, removed);
 		return "updated";
 	}
 
