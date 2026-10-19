@@ -155,7 +155,7 @@ No local numbers yet.
 - `index.ts`: wires the gate into pi. `gate.ts`: finds, runs and words the check (no pi needed).
 - `*.test.ts`: unit tests. `verify-gate.smoke.mjs`: a headless `pi -p` run against a mock model.
 - `bench/`: the measurement above. `run.ts` drives pi in-process through its SDK
-  (`createAgentSession`) on a copy of `~/.pi/agent`; `run-all.sh local|cloud [ROUNDS]` runs both
+  (`createAgentSession`) on a copy of `~/.pi/agent`; `run-all.sh NAME PROVIDER/MODEL [ROUNDS] [PROMPT]` runs both
   arms, `report.ts` writes `results/summary.md`; `results/*.jsonl` holds one row per run.
   `tickets/<name>/`: eleven TypeScript tickets (repo, issue, reference solution, hidden
   `node:test` grader); `selftest.ts` checks that each broken repo fails and each reference passes.
