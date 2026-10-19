@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 
 export interface Note {
-	id: string; // "lesson-" + hash of repo and normalised cue: the same cue in the same repo is the same note
+	id: string; // "lesson-" + hash of repo, normalised cue and normalised lesson: the same lesson in the same repo is the same note
 	repo: string;
 	cue: string; // when the lesson applies, in the words a future task would use
 	lesson: string; // what to do (or not do)
