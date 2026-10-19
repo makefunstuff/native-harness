@@ -8,6 +8,7 @@ extension on or off on its own.
 
 | extension | what it does | status |
 |---|---|---|
+| [`lessons`](extensions/lessons/README.md) | when something failed and was then fixed, asks for a short cue / lesson / evidence note and keeps it (Hindsight memory, or a local file); at the start of the next task in the same repo, appends only the notes that apply (Jev decides), so the mistake is not repeated. No system-prompt text, no tool | **beta** |
 | [`local-edit`](extensions/local-edit/README.md) | replaces pi's `edit`. It places near misses when exactly one spot fits (indentation ignored, or ≥ 0.95 similar), and on a miss shows the closest lines with line numbers. Every edit returns a compact diff of removed and added lines. It also repairs basename and `path#tag` paths. Same tool schema, so the prompt cache is kept. Cloud results in; local 27B numbers pending | **new** |
 | [`loop-guard`](extensions/loop-guard/README.md) | notices blind retries of a failed tool call, repeated no-progress calls and runs that stop on "I'll …" with no tool call, and appends a short correction (never rewrites history, so the prompt cache stays) | stable |
 | [`thinking-guard`](extensions/thinking-guard/README.md) | stops runaway thinking: gives llama.cpp servers a per-request thinking budget, and aborts and re-issues a reply that still thinks too long, with a "stop deliberating, act with a tool" note appended (append-only, so the prompt cache survives) | on for local models |
