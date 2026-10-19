@@ -11,7 +11,8 @@ const roots = ["extensions", "templates", "experimental/llama-native/extension",
 const files = [];
 const walk = (dir) => {
 	for (const d of readdirSync(dir, { withFileTypes: true })) {
-		if (d.name === "node_modules" || d.name.startsWith(".")) continue;
+		// bench tickets hold fixture repos whose tests fail on purpose (verify-gate/bench/selftest.ts runs them)
+		if (d.name === "node_modules" || d.name === "tickets" || d.name.startsWith(".")) continue;
 		if (d.name === "tasks" && dir.endsWith("bench")) continue; // benchmark tickets: graded by their bench, not unit tests
 		const p = join(dir, d.name);
 		if (/[\\/]bench[\\/]tasks$/.test(p)) continue; // benchmark tickets: their tests are graded by the bench

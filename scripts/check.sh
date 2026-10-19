@@ -11,6 +11,7 @@ echo "== lessons bench self-test (tickets, no model)"; node extensions/lessons/b
 echo "== smoke test (pi -p)"; node test/smoke.mjs
 echo "== extensions/local-edit bench"; node extensions/local-edit/bench/selftest.ts
 echo "== loop-guard bench tickets"; node extensions/loop-guard/bench/selftest.ts
+echo "== verify-gate bench tickets (self-test)"; node extensions/verify-gate/bench/selftest.ts
 echo "== experimental/llama-native"
 if [ "${PI_EXTRAS_NATIVE_CHECK:-0}" = 1 ]; then experimental/llama-native/scripts/check.sh
 else experimental/llama-native/scripts/check.sh --no-build; fi
