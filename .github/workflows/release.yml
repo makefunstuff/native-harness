@@ -1,0 +1,39 @@
+name: Release
+
+# Pushing a tag releases: the tag's commit is checked, and the release's notes are that version's
+# CHANGELOG.md section (scripts/release-notes.mjs), which must pass the public-repo rules
+# (scripts/no-secrets.mjs) and must match the version in package.json. Nothing is published to npm:
+# pi installs this package from git. See docs/RELEASE.md.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write # gh release create
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # the repository and the release are public: no secret, key, personal path, routable address
+      # or tailnet hostname in the tree
+      - name: Public-repo rule
+        run: node scripts/no-secrets.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # the same check CI runs on main, run on the tagged commit: a release is a commit that passes
+      - name: Check
+        run: scripts/check.sh
+        env:
+          PI_EXTRAS_SMOKE_CONFIG: empty
+      - name: Release notes
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" /tmp/notes.md
+      - name: Create the release
+        run: gh release create "$GITHUB_REF_NAME" --target "$GITHUB_SHA" --title "pi-extras $GITHUB_REF_NAME" --notes-file /tmp/notes.md --verify-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

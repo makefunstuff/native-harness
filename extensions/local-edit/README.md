@@ -69,7 +69,7 @@ filter. To try it for one run: `pi -e ./extensions/local-edit/index.ts`.
 Measured on 2026-10-19 with pi 1.3.0. Two measurements: an offline replay of real sessions,
 and a live bench through pi's SDK. Both are TypeScript: `bench/replay.mjs`, and
 `bench/run.ts` with `bench/report.ts`. The local part of the live bench is a reduced sample
-(section 4).
+(section 5).
 
 ### 1. Replay of real sessions
 
@@ -197,7 +197,7 @@ The task asked for the homelab evals too. Their coding tasks
 no-Python rule for this repository rules them out until they are ported, so they are not part of
 these numbers.
 
-### 4. Live bench, local: reduced sample
+### 5. Live bench, local: reduced sample
 
 **One round per arm, against six rounds in the cloud run** (the owner cut the local series short to
 save GPU time). The model is **Swift 1.5 Qwen3.8-Flash-Next IQ3_S on Strata**

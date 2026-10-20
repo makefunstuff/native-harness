@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Repository check: no Python anywhere, unit tests, the bench ticket self-tests, the shared bench's
+# Repository check: no Python anywhere, the public-repo rule (no secrets, keys, personal paths,
+# routable addresses), unit tests, the bench ticket self-tests, the shared bench's
 # dry run (harness, no model), the headless pi smoke test (mock model, copy of the pi config when
 # there is one), the local-edit bench self-test, and the d3-context experiment's checks (no GPU, no
 # model). Everything here is TypeScript and runs on node; CI runs this script.
@@ -13,6 +14,9 @@ source scripts/no-python.sh
 echo "== no Python (every script in this repo is TypeScript)"
 no_python
 echo "no Python files, no Python config"
+# The repo is public, and so are its recorded rows, READMEs and release notes: no key, no secret,
+# no personal path, no routable address, no tailnet hostname (scripts/no-secrets.mjs).
+echo "== public-repo rule (no secrets, keys, personal paths, routable addresses)"; node scripts/no-secrets.mjs
 echo "== unit tests"; node test/run-unit.mjs
 echo "== bench tickets (self-test: broken fails, reference passes)"; node bench/selftest.ts | tail -1
 echo "== bench ticket generator (deterministic)"; node bench/gen-bulk-rename.ts && git diff --exit-code -- bench/tickets/bulk-rename
