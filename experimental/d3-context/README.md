@@ -38,21 +38,30 @@ The settings are documented in the file header.
 | path | what |
 |---|---|
 | `extension/index.ts`, `extension/index.test.ts` | the extension and its unit test (`npm test` at the repo root) |
-| `bench/gen_long_tasks.py` | generates `bench/tasks-long/`: 9 long tickets plus 2 bundles of four, with hidden tests (not committed) |
-| `bench/selftest.sh` | the broken repo fails the hidden tests; repo + reference fix passes them |
-| `bench/ctx_run.py` | runs an arm (`base`, `d3`, `d3-27b`) with pi + deepseek-flash, one row per run |
-| `bench/ctx_report.py` | → `results/summary.md` |
-| `bench/ctx_forgot.py`, `bench/ctx_quick_refetch.py` | candidates for "forgot something it needed" |
-| `scripts/pi.sh`, `scripts/make-pi-agent-copy.sh` | pi on a copy of `~/.pi/agent` (nothing in the real one is edited) |
+| `bench/gen-long-tasks.ts`, `bench/long-tasks/` | generates `bench/tasks-long/`: 11 long tickets with hidden outcome tests (generated data, not committed) |
+| `../../../bench/run.ts --bench d3-context` | the runs: the `base` and `d3` arms on the long tickets, pi in-process, one row per run (the shared bench) |
+| `bench/context-report.ts` | → `results/context.md`: the context, the compactions, the re-reads, and what the router saved, per arm and task |
+| `bench/forgot.ts`, `bench/quick-refetch.ts` | candidates for "forgot something it needed": an output the router removed whose file is read again |
+| `bench/lib/log.ts` | reading of the extension's own decision log (`D3_LOG`) |
 | `scripts/check.sh` | the experiment's check (no GPU, no model), run by the top-level `scripts/check.sh` |
-| `results/` | per-run rows, the summary, and an archive of the decision logs, diffs and stderr |
+| `results/` | the recorded rows, the summary of those runs, `context.md`, and an archive of the decision logs, diffs and stderr |
 
 ## Run
 
 ```bash
-python3 bench/gen_long_tasks.py && bash bench/selftest.sh
-scripts/make-pi-agent-copy.sh
-export D3_URL=http://127.0.0.1:18190/v1      # a llama-server serving vllm-d3-flash (see RESULTS.md)
-python3 bench/ctx_run.py base --rounds 2 --jobs 3 & python3 bench/ctx_run.py d3 --rounds 2 --jobs 3
-python3 bench/ctx_report.py
+node experimental/d3-context/bench/gen-long-tasks.ts             # the long tickets (bench/tasks-long)
+node bench/selftest.ts --tasks-root experimental/d3-context/bench/tasks-long
+export D3_URL=http://127.0.0.1:18190/v1   # a llama-server serving vllm-d3-flash (see RESULTS.md)
+node bench/run.ts --bench d3-context --arms base --rounds 2 --workers 3
+node bench/run.ts --bench d3-context --arms d3   --rounds 2 --workers 3
+node experimental/d3-context/bench/context-report.ts
+node experimental/d3-context/bench/quick-refetch.ts --show
 ```
+
+pi runs in-process through its SDK (`bench/lib/pi.ts`), so both arms share one process: the
+extension is configured per run (`d3Context(pi, cfg)`, with `D3_LOG` per run) rather than read from
+the environment once at import. `D3_MODEL` picks the small model, `--model` the agent's.
+
+The rows recorded in `results/` (the runs of February 2026, read them in `RESULTS.md`) were measured
+by this experiment's earlier Python scripts. Those are gone; the files above are their equivalents,
+and the rows, tables and decision logs of those runs are kept as data.

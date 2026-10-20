@@ -6,9 +6,7 @@
 //
 //   1. the package loads: every enabled extension, next to whatever the config already has, and
 //      pi answers a prompt with no extension errors;
-//   2. the experimental llama-native extension loads its provider code in that install (with a
-//      stand-in addon file: the addon itself is only opened on the first request);
-//   3. every *.smoke.mjs spec in the repo (see templates/extension/template.smoke.mjs); a file may
+//   2. every *.smoke.mjs spec in the repo (see templates/extension/template.smoke.mjs); a file may
 //      export one spec or an array of them.
 //
 // Environment: PI_EXTRAS_SMOKE_CONFIG=copy|empty (default: copy if ~/.pi/agent exists),
@@ -46,7 +44,7 @@ function findSpecs() {
 			else if (d.name.endsWith(".smoke.mjs")) out.push(p);
 		}
 	};
-	for (const r of ["extensions", "templates", "experimental/llama-native/extension"]) if (existsSync(join(REPO, r))) walk(join(REPO, r));
+	for (const r of ["extensions", "templates", "experimental/d3-context/extension"]) if (existsSync(join(REPO, r))) walk(join(REPO, r));
 	return out;
 }
 
@@ -91,21 +89,6 @@ await check("package loads and pi answers", () =>
 );
 
 if (!realModel) {
-	await check("llama-native provider loads in the installed package", async () => {
-		const dir = mkdtempSync(join(process.env.PI_EXTRAS_TMP ?? tmpdir(), "pi-extras-addon-"));
-		const addon = join(dir, "llama_native.node");
-		writeFileSync(addon, "");
-		const agent = makeAgentDir();
-		try {
-			const res = await runPi(agent, ["--list-models", "llama-native"], { env: { LLAMA_NATIVE_ADDON: addon } });
-			const out = `--- stdout\n${res.stdout}\n--- stderr\n${res.stderr}`;
-			if (res.code !== 0 || EXTENSION_ERROR.test(res.stderr + res.stdout)) throw new Error(`pi failed (${res.code ?? res.signal})\n${out}`);
-			if (!/llama-native\s+qwen3\.8-27b/.test(res.stdout)) throw new Error(`llama-native model not listed\n${out}`);
-		} finally {
-			removeAgentDir(agent);
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
 	for (const file of findSpecs()) {
 		const specs = (await import(pathToFileURL(file).href)).default;
 		for (const spec of [specs].flat()) await check(`${relative(REPO, file)}: ${spec.name ?? ""}`, () => runSpec(spec));

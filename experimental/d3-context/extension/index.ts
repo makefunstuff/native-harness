@@ -32,14 +32,31 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { appendFileSync } from "node:fs";
 
-const URL = (process.env.D3_URL ?? "").replace(/\/$/, "");
-const MODEL = process.env.D3_MODEL ?? "vllm-d3-flash";
-const LOG = process.env.D3_LOG;
-const CHECK_TURNS = Number(process.env.D3_CHECK_TURNS ?? 2);
-const MIN_ITEM = Number(process.env.D3_MIN_ITEM ?? 1500);
-const KEEP_TURNS = Number(process.env.D3_KEEP_TURNS ?? 2);
-const PRESSURE = Number(process.env.D3_PRESSURE ?? 80000);
-const MIN_SAVE = Number(process.env.D3_MIN_SAVE ?? 4000);
+export interface D3Config {
+	/** Base URL ending in /v1 (System One wire); empty means the extension stays inactive. */
+	url: string;
+	model: string;
+	log?: string;
+	checkTurns: number;
+	minItem: number;
+	keepTurns: number;
+	pressure: number;
+	minSave: number;
+}
+
+export function readConfig(env: Record<string, string | undefined> = process.env): D3Config {
+	const num = (v: string | undefined, d: number) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : d);
+	return {
+		url: (env.D3_URL ?? "").replace(/\/$/, ""),
+		model: env.D3_MODEL ?? "vllm-d3-flash",
+		log: env.D3_LOG || undefined,
+		checkTurns: num(env.D3_CHECK_TURNS, 2),
+		minItem: num(env.D3_MIN_ITEM, 1500),
+		keepTurns: num(env.D3_KEEP_TURNS, 2),
+		pressure: num(env.D3_PRESSURE, 80000),
+		minSave: num(env.D3_MIN_SAVE, 4000),
+	};
+}
 const STATE_BUDGET = 15000; // chars of state per call (d3-flash has an 8k-token context)
 const PINS_PER_ITEM = 6;
 const NOTES_MAX = 3000; // chars of the shared notes block (oldest pins go first)
@@ -57,10 +74,6 @@ interface Item {
 interface Applied {
 	decision: Decision;
 	replacement: string;
-}
-
-function log(rec: any) {
-	if (LOG) appendFileSync(LOG, JSON.stringify({ t: Date.now() / 1000, ...rec }) + "\n");
 }
 
 function textOf(content: any): string {
@@ -101,7 +114,7 @@ function excerpt(text: string, head = 520, tail = 320): string {
 }
 
 // lines worth pinning: paths, errors, failing tests, assertions, locations
-const KEY_LINE = /(Error|Exception|Traceback|FAIL|failed|assert|expected|!=|line \d+|\w[\w./-]*\.(py|md|json|csv|txt|log|ini|toml|cfg|diff)\b|^\s*(def|class) \w+)/;
+const KEY_LINE = /(Error|Exception|Traceback|FAIL|failed|assert|expected|!=|line \d+|\w[\w./-]*\.(ts|tsx|js|mjs|py|md|json|csv|txt|log|ini|toml|cfg|diff)\b|^\s*(def|class|export|function) \w+)/;
 
 function keyLines(text: string): string[] {
 	const out: string[] = [];
@@ -127,12 +140,12 @@ function summarise(text: string): string {
 	return [...head, `[... ${lines.length - 16} lines, key lines kept:]`, ...mid, "[...]", ...tail].join("\n").slice(0, 2500);
 }
 
-async function systemOne(state: string, questions: Record<string, any>) {
+async function systemOne(cfg: D3Config, state: string, questions: Record<string, any>) {
 	const t0 = performance.now();
-	const res = await fetch(`${URL}/systemone`, {
+	const res = await fetch(`${cfg.url}/systemone`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ model: MODEL, state, questions }),
+		body: JSON.stringify({ model: cfg.model, state, questions }),
 		signal: AbortSignal.timeout(60000),
 	});
 	const j: any = await res.json();
@@ -141,7 +154,19 @@ async function systemOne(state: string, questions: Record<string, any>) {
 }
 
 export default function (pi: ExtensionAPI) {
-	if (!URL) {
+	d3Context(pi, readConfig());
+}
+
+/**
+ * The extension with an explicit config: the bench loads one per run this way, so each run's log
+ * path is its own (module-level environment is read once per process, and the bench runs several
+ * runs in one process).
+ */
+export function d3Context(pi: ExtensionAPI, cfg: D3Config) {
+	const log = (rec: any) => {
+		if (cfg.log) appendFileSync(cfg.log, JSON.stringify({ t: Date.now() / 1000, ...rec }) + "\n");
+	};
+	if (!cfg.url) {
 		console.error("d3-context: D3_URL is not set; extension inactive");
 		return;
 	}
@@ -183,12 +208,12 @@ export default function (pi: ExtensionAPI) {
 				const c = calls.get(m.toolCallId);
 				const t = textOf(m.content);
 				const tr = c?.turn ?? turnOf[i];
-				if (t.length >= MIN_ITEM && tr <= nTurns - KEEP_TURNS)
+				if (t.length >= cfg.minItem && tr <= nTurns - cfg.keepTurns)
 					items.push({ key: m.toolCallId, idx: i, turn: tr, label: callLabel(c), text: t, kind: "tool" });
-			} else if (m.role === "assistant" && turnOf[i] <= nTurns - KEEP_TURNS) {
+			} else if (m.role === "assistant" && turnOf[i] <= nTurns - cfg.keepTurns) {
 				const t = (m.content ?? []).filter((b: any) => b.type === "text" || b.type === "thinking")
 					.map((b: any) => b.text ?? b.thinking ?? "").join("\n");
-				if (t.length >= MIN_ITEM) items.push({ key: `a:${m.timestamp ?? i}`, idx: i, turn: turnOf[i], label: `the agent's own notes in turn ${turnOf[i]}`, text: t, kind: "assistant" });
+				if (t.length >= cfg.minItem) items.push({ key: `a:${m.timestamp ?? i}`, idx: i, turn: turnOf[i], label: `the agent's own notes in turn ${turnOf[i]}`, text: t, kind: "assistant" });
 			}
 		});
 		const open = items.filter((it) => !applied.has(it.key));
@@ -196,7 +221,7 @@ export default function (pi: ExtensionAPI) {
 		// the size of the request as it is actually sent: earlier edits and the notes block included
 		const estTokens = out.reduce((a, m) => a + msgChars(m), 0) / CHARS_PER_TOKEN + 6000; // + system prompt and tools
 		const last = msgs[msgs.length - 1];
-		const due = open.length > 0 && last?.role === "toolResult" && nTurns - lastCheckTurn >= CHECK_TURNS;
+		const due = open.length > 0 && last?.role === "toolResult" && nTurns - lastCheckTurn >= cfg.checkTurns;
 		// the check runs in the background: its edits apply from the next request on, so the agent
 		// never waits for the decision model
 		if (due && !running) {
@@ -252,7 +277,7 @@ export default function (pi: ExtensionAPI) {
 		let calls_n = 0;
 		// d3 runs each question as its own full pass over the state (non-causal attention, no shared
 		// prefix), so a joint call costs n_questions x state: ask each item with only its own excerpt
-		const b = await systemOne(header, {
+		const b = await systemOne(cfg, header, {
 			boundary: {
 				type: "noul",
 				instructions: "Has the agent just finished one subtask (a bug fixed and checked, a file or module completely updated, an investigation concluded) and is it now moving on to a different part of the task?",
@@ -269,7 +294,7 @@ export default function (pi: ExtensionAPI) {
 		const decisions = new Map<string, { d: Decision; p: Record<string, number> }>();
 		for (const it of open) {
 			const state = header + `One earlier output still in its context, ${it.label} (from turn ${it.turn} of ${nTurns}, ${it.text.length} chars):\n${excerpt(it.text)}`;
-			const r = await systemOne(state.slice(0, STATE_BUDGET), {
+			const r = await systemOne(cfg, state.slice(0, STATE_BUDGET), {
 				item: {
 					type: "choice",
 					instructions: `For the agent's current and remaining work, what should happen to this output (${it.label})?`,
@@ -288,13 +313,13 @@ export default function (pi: ExtensionAPI) {
 				choice: a?.choice, p: a?.probabilities, ms: Math.round(r.ms), usage: r.usage, state_chars: state.length });
 		}
 		const atBoundary = (boundary ?? 0) >= 0.5;
-		const pressure = estTokens >= PRESSURE;
+		const pressure = estTokens >= cfg.pressure;
 		const toApply = open.filter((it) => {
 			const d = decisions.get(it.key)?.d;
 			return d === "drop" || d === "summarise";
 		});
 		const saving = toApply.reduce((a, it) => a + it.text.length, 0);
-		const apply = (atBoundary || pressure) && saving >= MIN_SAVE;
+		const apply = (atBoundary || pressure) && saving >= cfg.minSave;
 		log({ kind: "check", turn: nTurns, est_tokens: Math.round(estTokens), boundary, at_boundary: atBoundary, pressure,
 			candidates: open.length, to_apply: toApply.length, saving_chars: saving, applied: apply, d3_ms: Math.round(ms), d3_calls: calls_n });
 		if (!apply) return;
@@ -317,7 +342,7 @@ export default function (pi: ExtensionAPI) {
 					};
 				});
 				try {
-					const r = await systemOne(state.slice(0, STATE_BUDGET), qs);
+					const r = await systemOne(cfg, state.slice(0, STATE_BUDGET), qs);
 					ms += r.ms;
 					calls_n++;
 					const ps = cands.map((_, k) => r.answers[`pin${k + 1}`]?.noul ?? 0);

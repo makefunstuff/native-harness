@@ -97,7 +97,7 @@ succeeded; the retry rule fires only when the retry fails the same way.
 `bench/run.ts` drives pi in-process through its SDK (`createAgentSession`) on a copy of the pi
 config, with the default tools (read, bash, edit, write). Each ticket runs once without and once
 with loop-guard per round. Nine TypeScript tickets in `bench/tasks/`: six regular ones (logstats,
-ttlcache, cli-json, bulk-rename from `experimental/llama-native/bench`; event-reconcile and
+ttlcache, cli-json, bulk-rename, shared with `bench/tickets/`; event-reconcile and
 schedule-repair from the homelab capability suite), and three traps whose obvious first call fails
 (stale-paths: the issue names a path and a test command that do not exist; twin-blocks: the text to
 replace appears twice; no-exec: the test script has no exec bit). Hidden `node:test` tests grade the

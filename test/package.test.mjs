@@ -9,7 +9,7 @@ const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8"));
 const HOST = ["@earendil-works/pi-ai", "@earendil-works/pi-agent-core", "@earendil-works/pi-coding-agent", "@earendil-works/pi-tui", "typebox"];
 
 test("manifest lists the extension folders and the experimental extra", () => {
-	assert.deepEqual(pkg.pi.extensions, ["./extensions/*/index.ts", "./experimental/llama-native/extension/index.ts"]);
+	assert.deepEqual(pkg.pi.extensions, ["./extensions/*/index.ts"]);
 	for (const d of extensionDirs()) assert.ok(existsSync(join(d, "index.ts")), `${d}/index.ts`);
 });
 

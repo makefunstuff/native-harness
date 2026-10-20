@@ -74,8 +74,8 @@ and a live bench through pi's SDK. Both are TypeScript: `bench/replay.mjs`, and
 ### 1. Replay of real sessions
 
 `node extensions/local-edit/bench/replay.mjs` reads pi sessions on this machine:
-`~/.pi/agent/sessions`, plus the plain-ticket bench sessions of the llama-native, d3-context and
-verify-gate experiments. It leaves out the trap tickets of loop-guard and thinking-guard, which
+`~/.pi/agent/sessions`, plus the plain-ticket bench sessions of the shared bench (`bench/`),
+d3-context and verify-gate. It leaves out the trap tickets of loop-guard and thinking-guard, which
 fail edits on purpose. For every edit call it rebuilds the file as the model saw it: from a full
 `read`, a `cat FILE`, or a `write`, with the earlier successful edits applied on top. It then runs
 the call through pi's own edit tool and through local-edit's matcher. Snapshot:
