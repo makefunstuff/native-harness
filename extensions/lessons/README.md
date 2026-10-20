@@ -179,7 +179,7 @@ included. The DeepSeek provider reports no cost, so there is no dollar column.)
   - The Hindsight path itself worked in a probe on this machine before the outage: a tagged
     retain, then recall returned the note with its metadata (score 1.10), and Jev kept it at
     p = 0.92 in a trial run. It is covered by unit tests against a fake Hindsight server.
-  - A run with Hindsight writes working is listed under pending below.
+  - A cloud run with Hindsight writes working is still to do (see "Local: not measured" below).
 - **What this shows and what it does not.**
   - The tickets are built so that house rules are learnt by failing: a policy checker states
     them only on failure, the way a CI policy or a linter plugin does. On rules that the code
@@ -190,26 +190,15 @@ included. The DeepSeek provider reports no cost, so there is no dollar column.)
   - A hand-written `AGENTS.md` line would prevent the same mistakes; lessons writes that line
     itself, and only shows it when the task needs it.
 
-## Local 27B: pending
+## Local: not measured (skipped by the owner)
 
-Not run yet: the HML-2 Strata trial holds both GPUs and stops the llama.cpp router, so no local
-model was used. A separate task runs these once the router is back. All are sequential, one
-command after another, on `llama.cpp/qwen3.8-27b`:
-
-1. `node extensions/lessons/bench/run.ts base --model llama.cpp/qwen3.8-27b --rounds 4`
-2. `node extensions/lessons/bench/run.ts lessons --model llama.cpp/qwen3.8-27b --rounds 4`, with
-   Hindsight writes working. Check that rows carry no `Hindsight write failed` note and that
-   `recall.hindsightHits` > 0, i.e. candidates with `source: "hindsight"`.
-3. `node extensions/lessons/bench/run.ts lessons-file --model llama.cpp/qwen3.8-27b --rounds 2`
-4. `node extensions/lessons/bench/report.ts > extensions/lessons/bench/results/summary.md`, then
-   update the table above (add a local row per arm).
-5. Prompt cache on hybrid Qwen: in the router log, the request answering the lesson request (and
-   the first request of a session with lessons appended) must reuse the previous prefix
-   (`f_keep` ≈ 1, no full re-prefill). Rows hold `ask_input` / `ask_cache_read`, but llama.cpp may
-   not report cache reads, so read the router log.
-6. Optional: the homelab agentic-glimmer tickets (`homelab/evals/agentic-glimmer-2026-10-14`) are
-   independent tasks with Python hidden tests, so they cannot measure repeats across tickets.
-   They could only check for harm, after porting them to TypeScript.
+The local runs planned for HRN-13 were **not run**: base, lessons and lessons-file on a local model,
+and the prompt-cache check on the request that answers the lesson request. The owner skipped them
+on 2026-10-20 because the local model now in use, Swift 1.5 Qwen3.8-Flash-Next IQ3_S on Strata
+(`strata/swift-1.5-flash-next-iq3_s`), already passes coding tickets in the other extensions'
+local runs: verify-gate 42/44, loop-guard 10/10 and local-edit 6/6. These numbers are about
+passing tickets, not about repeated house-rule mistakes, which is what this bench measures. So
+there is still no local figure for the repeated-mistake rate.
 
 Also still to run on cloud, once Hindsight takes writes again (it does not depend on the GPUs):
 `node extensions/lessons/bench/run.ts lessons --model deepseek/deepseek-flash --rounds 4 --out lessons-hindsight`.
