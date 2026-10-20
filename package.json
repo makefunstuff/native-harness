@@ -1,6 +1,7 @@
 {
   "name": "pi-extras",
   "version": "0.1.0",
+  "private": true,
   "description": "Extensions that make pi work better, especially with local models",
   "license": "MIT",
   "type": "module",
@@ -22,6 +23,7 @@
     "experimental/llama-native/extension",
     "experimental/llama-native/configs",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "pi": {
