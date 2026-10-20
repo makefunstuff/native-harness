@@ -13,7 +13,8 @@
 //       reissue  the request plus the guard's note as a new user message (what the guard sends)
 //     llama-server reports prompt_n (tokens processed) and cache_n (tokens reused) per request.
 //
-// BASE_URL is the server root, e.g. http://my-gpu-box:8080 (not stored anywhere).
+// BASE_URL is the server root, e.g. http://my-gpu-box:8080 (not stored anywhere). REPLAY_API_KEY, when set, is
+// sent as a bearer token (for servers behind a key, e.g. Strata); REPLAY_MODEL overrides the captured model id.
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -39,7 +40,7 @@ interface Result {
 function send(base: string, body: Record<string, unknown>, abortAfter?: number): Promise<Result> {
 	const t0 = Date.now();
 	const url = new URL(`${base.replace(/\/+$/, "")}/v1/chat/completions`);
-	const data = JSON.stringify({ ...body, stream: true });
+	const data = JSON.stringify({ ...body, ...(process.env.REPLAY_MODEL ? { model: process.env.REPLAY_MODEL } : {}), stream: true });
 	return new Promise((resolve, reject) => {
 		let reasoning = "", content = "", finish: string | null = null, timings: any, aborted = false, buf = "";
 		const tools = new Map<number, string>();
@@ -59,7 +60,14 @@ function send(base: string, body: Record<string, unknown>, abortAfter?: number):
 			});
 		const req = (url.protocol === "https:" ? httpsRequest : httpRequest)(
 			url,
-			{ method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(data) } },
+			{
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					"content-length": Buffer.byteLength(data),
+					...(process.env.REPLAY_API_KEY ? { authorization: `Bearer ${process.env.REPLAY_API_KEY}` } : {}),
+				},
+			},
 			(res) => {
 				if (res.statusCode !== 200) {
 					let err = "";

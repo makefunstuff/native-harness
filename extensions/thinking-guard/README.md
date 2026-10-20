@@ -74,9 +74,9 @@ the model).
 
 ## Results
 
-Measured 2026-10-18/19. **Cloud runs are complete; most local runs are still to do** (see
-[Local 27B: pending](#local-27b-pending)): the llama.cpp router was shared with three other
-benchmark campaigns while this ran, then taken offline for another trial.
+Measured 2026-10-18/19. **Cloud runs are complete. The local runs are the first ones on the 27B
+only**; the rest were skipped by the owner (see [Local: not measured](#local-not-measured-skipped-by-the-owner)).
+The llama.cpp router was shared with three other benchmark campaigns while these ran.
 
 **In short:**
 
@@ -114,15 +114,14 @@ user aborted.
 All numbers are characters of thinking in one reply; wall times include queueing behind the other
 campaigns on the router. The first rows of each case come from an earlier Python prototype of
 `replay.ts` (since removed). It sent the same requests with the same added fields; only the
-`wifi-336` re-run is from `replay.ts` itself. Re-running all of them on `replay.ts` is in the
-pending list.
+`wifi-336` re-run is from `replay.ts` itself. The others were not re-run on `replay.ts`.
 ¹ the model ended its thinking on its own at about 2,200 tokens, just under the budget.
 ² the guarded request re-read its whole 60k-token prompt: another campaign had evicted the slot.
 
 ### Local 27B: prompt cache
 
 `replay.ts cache` on the `games-15` request (16,408 prompt tokens), back to back. This first trial
-also ran on the Python prototype; trials on `replay.ts` are pending.
+also ran on the Python prototype; there were no trials on `replay.ts`.
 
 | step | prompt tokens processed | reused |
 |---|---:|---:|
@@ -151,25 +150,26 @@ ticket passed. Tool errors are mostly failing test or command runs during the wo
 32 of 46 on); the difference is within run-to-run noise.
 Raw rows: [`bench/results/`](bench/results/).
 
-### Local 27B: pending
+### Local: not measured (skipped by the owner)
 
-**Left pending by design:** the owner moved all local measurements to a separate task, HRN-13,
-which runs them once the HML-2 trial has given the GPUs and the router back. To run then, with no
-other campaign on the router (shared-slot eviction made wall
-times and cache numbers meaningless during this task):
+The local agent tickets, the replays on `replay.ts` and the prompt-cache trials planned for HRN-13
+were **not run**. The owner skipped them on 2026-10-20 because the local model now in use, Swift 1.5
+Qwen3.8-Flash-Next IQ3_S on Strata (`strata/swift-1.5-flash-next-iq3_s`), already passes these
+kinds of tickets in the other extensions' local runs:
+- verify-gate: 42 of 44 runs passed, including `event-reconcile` 4/4, `logstats` 3/4 and
+  `ttlcache` 4/4.
+- loop-guard: 10/10 tickets, including `event-reconcile` 2/2 and `logstats` 2/2.
+- local-edit: 6/6.
 
-1. **Agent tickets**, `node bench/run.ts ARM --model llama.cpp/qwen3.8-27b` with three arms:
-   `local-off` (`--guard off`), `local-on` (`--guard on`), `local-abort` (`--guard on --set budget=off`,
-   the abort-and-re-issue path alone). All 5 tickets in round 1; `pcap-decode`, `interval-sweep` and
-   `event-reconcile` in rounds 2 and 3: 11 runs per arm, 33 in all. Report with
-   `node bench/run.ts --report local-off local-on local-abort`.
-2. **Replays** on `replay.ts`: `replay` on the four captured requests (the turns above:
-   `wifi-336`, `wifi-355`, `games-15`, `games-69`; re-capture them with `capture.ts SESSION LINE
-   llama.cpp/qwen3.8-27b OUT`), 2 rounds, both arms.
-3. **Prompt cache** on `replay.ts`: `replay.ts cache … games-15.json … --trials 3 --abort-chars 2000`
-   (2000, so the abort step surely aborts).
-4. **User aborts:** after a few days of local use with the guard on, scan the local sessions again for
-   the share of user-aborted turns (2.4% before) and for turns over 8k characters of thinking.
+So the local numbers above are still the 27B's, from the first, partly shared-router runs.
+
+One thing was checked on Strata (a single request, 2026-10-20): **Strata ignores
+`thinking_budget_tokens`.** With and without the field, the reply thought for about 3,300 tokens
+and stopped on Strata's own cap ("I have thought about this long enough"). On Strata, then, only
+the guard's abort-and-re-issue path can act; the budget does nothing there.
+
+Still open, and needing real use rather than a bench: the share of user-aborted turns (2.4 %
+before) after a few days of local use with the guard on.
 
 ## Benchmark
 

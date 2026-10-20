@@ -62,7 +62,9 @@ Short version, measured 2026-10-18/19:
   run ends with the work undone (0/5); with it the model goes on and passes (5/5). The retry note
   fires every time, but DeepSeek never repeated the failed call even without it, so on cloud there
   was no blind retry for it to prevent.
-- **The local 27B, the model this is for, is not measured yet** (see "Local 27B: pending").
+- **Locally, only a partial sample** (Strata Swift 1.5 Flash-Next, 1 round; see "Local: partial
+  sample on Strata"). It passed 5/5 tickets in both arms, and the guard never fired. On injection,
+  the stall nudge rescued its run, but in one retry-edit run the model stopped after the retry note.
 
 ### Recorded sessions (replay)
 
@@ -168,23 +170,51 @@ third time.
 Anthropic models cannot go through the proxy (it speaks the OpenAI chat-completions API), so the
 injection runs on cloud use DeepSeek Flash only.
 
-### Local 27B: pending
+### Local: partial sample on Strata (2026-10-20)
 
-**Not measured yet.** The local runs were stopped on 2026-10-19 because the machine is lent to
-another trial (the llama.cpp router is down and its GPUs are taken), so no local numbers are in this
-README. A separate task runs them afterwards. Still to do, on `llama.cpp/qwen3.8-27b` through the
-router, thinking `medium`, one run at a time:
+**A partial sample, much smaller than the cloud runs.** The tickets ran 1 round on 5 of the 9
+tickets, and the owner stopped the series there; the cloud ran 3 rounds on all 9. Injection ran
+1 round per scenario, against 5 rounds in the cloud. The model is **Swift 1.5 Qwen3.8-Flash-Next
+IQ3_S on Strata** (`strata/swift-1.5-flash-next-iq3_s`, thinking `medium`), not the Qwen3.8-27B on
+the llama.cpp router that was planned. The router stayed off for this task. Raw rows are in
+`bench/results/strata-swift.jsonl` and `inject-strata-swift.jsonl`. Tables:
+`node bench/report.ts inject-strata-swift strata-swift`.
 
-1. Injection, 3 rounds × 4 scenarios × 2 arms = 24 runs:
-   `node extensions/loop-guard/bench/run.ts --model llama.cpp/qwen3.8-27b --thinking medium --label inject-qwen3.8-27b --inject retry-read,retry-bash,retry-edit,stall --rounds 3`
-2. Tickets, 3 rounds × 9 tickets × 2 arms = 54 runs:
-   `node extensions/loop-guard/bench/run.ts --model llama.cpp/qwen3.8-27b --thinking medium --label qwen3.8-27b --rounds 3`
-3. `node extensions/loop-guard/bench/report.ts inject-qwen3.8-27b qwen3.8-27b` and replace this
-   section with the two tables.
+Tickets (bulk-rename, cli-json, event-reconcile, logstats and no-exec; no-exec is the only trap
+among them):
 
-Each command resumes where it stopped and reruns runs that ended on a provider error; run it a
-second time after it finishes. A 27B run took about 6 minutes while other benchmarks shared the
-router.
+| | without loop-guard | with loop-guard |
+|---|---:|---:|
+| runs | 5 | 5 |
+| passed | 5/5 | 5/5 |
+| tool calls / run | 19.2 | 26.0 |
+| tool error rate | 0.0 % | 2.3 % |
+| exact retry of a failed call | 0 | 0 |
+| notes: retry / repeat / streak | 0 / 0 / 0 | 0 / 0 / 0 |
+| runs ending on a stall / nudges | 0 / 0 | 0 / 0 |
+| median wall time | 147 s | 195 s |
+
+Injection (1 run per scenario and arm):
+
+| scenario | passed, without → with | model's first call repeats the failed call | notes / nudges (with) |
+|---|---|---|---|
+| retry-read | 1/1 → 1/1 | 0 / 0 | 1 / 0 |
+| retry-bash | 1/1 → 1/1 | 0 / 0 | 1 / 0 |
+| retry-edit | 1/1 → **0/1** | 0 / 0 | 1 / 0 |
+| stall | 0/1 → 1/1 | – | 0 / 1 |
+
+- **Tickets: the guard stayed silent.** The local model passed all 5 tickets in both arms. No run
+  made a blind retry or ended on a stall, so loop-guard sent no note and no nudge. The differences
+  in calls and wall time come from 5 runs per arm and show no effect of the guard.
+- **Stall: the nudge rescued the run**, as on DeepSeek. Without it the run ended with the work
+  undone; with it the model went on and passed.
+- **retry-edit: one run went the wrong way.** After the retry note, the model miscounted its two
+  identical calls as three. It decided it "must stop and escalate", reported the failing call and
+  stopped with no change made. Without the guard, the same scenario passed. The note gives no
+  instruction to stop, so this looks like the model's own habit, triggered by the note's wording.
+  It is one run, and it is worth watching when loop-guard is used with this model.
+- **Not run:** rounds 2–3, the other 4 tickets (schedule-repair, ttlcache, stale-paths,
+  twin-blocks), and rounds 2–3 of the injection.
 
 ### Reproduce
 
