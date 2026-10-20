@@ -21,6 +21,13 @@ touches the owner's `~/.pi/agent`: the install check uses a throw-away config di
 PI_EXTRAS_SMOKE_CONFIG=empty scripts/check.sh     # what CI runs, on a clean pi config
 ```
 
+It starts with two rules of its own: the no-Python rule (`scripts/no-python.sh`) and the
+**public-repo rule** (`node scripts/no-secrets.mjs`): no key, secret, personal path
+(`/home/<user>/…`, `/Users/<user>/…`, `/root/…`), routable IP address or tailnet hostname anywhere
+in the tree — tracked, untracked, or written by a ticket generator. A line that must stay (the
+rule's own pattern, a synthetic public fixture a test needs) carries `no-secrets: allow` and says
+why. CI runs the same step.
+
 ## 3. The install check, on a clean config copy
 
 `pi install git:…` is how the package is installed, so the release is only checked through it.
@@ -46,24 +53,30 @@ run must print no extension load error.
 
 ## 4. Tag and GitHub release
 
-Commit the version, changelog and README changes, then, once they are on `main`:
+Commit the version, changelog and README changes and get them onto `main`. Then:
 
 ```bash
 git tag -a v<x.y.z> -m "pi-extras v<x.y.z>"
 git push origin main v<x.y.z>
 ```
 
-Release notes: write them from the release's `CHANGELOG.md` section (the extensions, their measured
-numbers, the known gaps) plus the install command:
+Pushing the tag runs [.github/workflows/release.yml](../.github/workflows/release.yml): it re-runs
+the public-repo rule and `scripts/check.sh` on the tagged commit, builds the release notes from that
+version's `CHANGELOG.md` section (`node scripts/release-notes.mjs v<x.y.z> [out.md]`, which refuses a
+version that does not match `package.json` and notes that fail the public-repo rules), and creates
+the GitHub release.
+
+By hand, the same steps:
 
 ```bash
-gh release create v<x.y.z> --target main --title "pi-extras v<x.y.z>" --notes-file /tmp/notes.md
+node scripts/release-notes.mjs v<x.y.z> /tmp/notes.md   # the version's changelog section, checked
+gh release create v<x.y.z> --target main --title "pi-extras v<x.y.z>" --notes-file /tmp/notes.md --verify-tag
 ```
 
-Notes must not contain secrets, keys, tokens, internal hostnames, LAN addresses or personal paths:
-this repository and its releases are public. The same rule applies to files committed in the repo;
-`bench/results/` rows are machine output, so check them for absolute paths of the form
-`/home/<user>/…` before a release.
+The notes and the repository are public, and the release workflow will not publish a tree that
+fails `scripts/no-secrets.mjs`. Recorded benchmark rows are machine output, so read the findings
+before adding an allow marker: `/home/<user>/…` in a recorded row is a finding to fix, not to
+allow.
 
 ## 5. npm
 

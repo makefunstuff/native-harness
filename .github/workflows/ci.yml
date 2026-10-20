@@ -21,6 +21,10 @@ jobs:
       # The same check scripts/check.sh runs, run first so a Python file fails before npm ci.
       - name: No Python
         run: bash scripts/no-python.sh
+      # the repository is public: no secret, key, personal path, routable address or tailnet name,
+      # in tracked files, untracked ones and ticket trees a generator has written
+      - name: Public-repo rule
+        run: node scripts/no-secrets.mjs
       - run: npm ci --ignore-scripts --no-audit --no-fund
       # no ~/.pi/agent on the runner: the smoke test runs pi on an empty config
       - run: scripts/check.sh

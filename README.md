@@ -239,9 +239,18 @@ pi install "$PWD"              # use your checkout as the installed package
   `__pycache__`, tracked, untracked, or written by a ticket generator — or a Python config file
   (`requirements.txt`, `pyproject.toml`, …) fails the run. `scripts/check.sh` runs the same check
   first and last, so a generated ticket tree is covered too. Everything in this repo is TypeScript
-  and runs on node; `npm ci` is the only install.
+  and runs on node; `npm ci` is the only install. It then runs the **public-repo rule**
+  (`node scripts/no-secrets.mjs`): no key, secret, personal path (`/home/<user>/…`), routable IP
+  address or tailnet hostname anywhere in the tree, tracked, untracked or generated — the repository,
+  its recorded benchmark rows and its release notes are all public. A line that has to stay (the
+  rule's own pattern, a synthetic public fixture a test needs) carries `no-secrets: allow` and says
+  why; `test/release-hygiene.test.mjs` tests both.
 - **Releasing**: [docs/RELEASE.md](docs/RELEASE.md) — version, changelog, tag, GitHub release, and
-  the install check on a clean config.
+  the install check on a clean config. Pushing a `v*.*.*` tag runs
+  [`.github/workflows/release.yml`](.github/workflows/release.yml): it checks the tagged commit and
+  creates the release with notes from that version's `CHANGELOG.md` section
+  (`node scripts/release-notes.mjs v<x.y.z> [out.md]`, which refuses a version that does not match
+  `package.json` and notes that fail the public-repo rules).
 
 ## Layout
 
@@ -254,6 +263,9 @@ test/                     unit-test runner, smoke test, shared harness (mock mod
 docs/RELEASE.md           how to cut a release
 scripts/check.sh          repository check (CI)
 scripts/no-python.sh      the no-Python rule (CI's first step, called by check.sh)
+scripts/no-secrets.mjs    the public-repo rule (no secrets, keys, personal paths, routable IPs)
+scripts/release-notes.mjs a release's notes, from CHANGELOG.md, put through that rule
+.github/workflows/release.yml  tag push → check → GitHub release
 ```
 
 ## Removed

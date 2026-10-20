@@ -6,9 +6,9 @@ import { test } from "node:test";
 import { DEFAULTS, LlamaCppDetector, budgetHit, isGuarded, isLocalModel, isPrivateHost, loadConfig, looksLikeLlamaCppProps, noteFor, serverRoot, thinkingChars, withBudget } from "./guard.ts";
 
 test("private hosts", () => {
-	for (const h of ["localhost", "127.0.0.1", "10.1.2.3", "192.168.0.9", "172.20.0.1", "100.100.1.1", "[::1]", "fd12::1", "gpu-box", "gpu.lan", "box.local", "x.tail1234.ts.net"])
+	for (const h of ["localhost", "127.0.0.1", "10.1.2.3", "192.168.0.9", "172.20.0.1", "100.100.1.1", "[::1]", "fd12::1", "gpu-box", "gpu.lan", "box.local", "x.tail1234.ts.net"]) // no-secrets: allow (made-up host names the rule must treat as private)
 		assert.ok(isPrivateHost(h), h);
-	for (const h of ["api.openai.com", "8.8.8.8", "172.32.0.1", "openrouter.ai", "2001:db8::1"]) assert.ok(!isPrivateHost(h), h);
+	for (const h of ["api.openai.com", "8.8.8.8", "172.32.0.1", "openrouter.ai", "2001:db8::1"]) assert.ok(!isPrivateHost(h), h); // no-secrets: allow (synthetic public fixtures: the test needs non-private hosts)
 });
 
 test("local models and scope", () => {
