@@ -60,11 +60,15 @@ git tag -a v<x.y.z> -m "pi-extras v<x.y.z>"
 git push origin main v<x.y.z>
 ```
 
+Tags are signed (`tag.gpgsign=true`). Where the signing key is not available, an annotated unsigned
+tag still releases: `git -c tag.gpgsign=false tag -a v<x.y.z> -m "pi-extras v<x.y.z>"`.
+
 Pushing the tag runs [.github/workflows/release.yml](../.github/workflows/release.yml): it re-runs
 the public-repo rule and `scripts/check.sh` on the tagged commit, builds the release notes from that
 version's `CHANGELOG.md` section (`node scripts/release-notes.mjs v<x.y.z> [out.md]`, which refuses a
 version that does not match `package.json` and notes that fail the public-repo rules), and creates
-the GitHub release.
+the GitHub release. A tag push schedules the workflow twice — the file is on the tag and on the
+default branch — so the run that arrives second updates the release rather than failing on it.
 
 By hand, the same steps:
 

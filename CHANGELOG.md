@@ -3,6 +3,13 @@
 All versions of pi-extras. The package is installed from git
 (`pi install git:github.com/makefunstuff/pi-extras`); it is not published to npm.
 
+## Unreleased
+
+- The release workflow updates a release that already exists instead of failing on it. Pushing a tag
+  schedules the workflow twice (the file is on the tag and on the default branch), and the run that
+  arrived second on v0.1.0 ended with `HTTP 422 … Release.tag_name already exists`. The release
+  itself was fine.
+
 ## 0.1.0 — 2026-10-20
 
 First release. One pi package, five extensions, each loaded on its own, each measured against

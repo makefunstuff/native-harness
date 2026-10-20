@@ -34,6 +34,13 @@ jobs:
       - name: Release notes
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" /tmp/notes.md
       - name: Create the release
-        run: gh release create "$GITHUB_REF_NAME" --target "$GITHUB_SHA" --title "pi-extras $GITHUB_REF_NAME" --notes-file /tmp/notes.md --verify-tag
+        # pushing a tag schedules this workflow twice (the file is on the tag and on the default
+        # branch), so the run that arrives second updates the release it cannot create
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "pi-extras $GITHUB_REF_NAME" --notes-file /tmp/notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --target "$GITHUB_SHA" --title "pi-extras $GITHUB_REF_NAME" --notes-file /tmp/notes.md --verify-tag
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
