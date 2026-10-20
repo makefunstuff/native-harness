@@ -12,6 +12,8 @@
 | deepseek-told-gate | deepseek/deepseek-flash | 33 | 32/33 (97%) | 0 | 1/33 (3%) | 0 | 0/0 | 0 | 18 | 7 | 3635 |
 | local-27b-plain-base | llama.cpp/qwen3.8-27b:medium | 11 | 10/11 (91%) | 0 | 1/11 (9%) | 0 | 0/0 | 0 | 67 | 9 | 7773 |
 | local-27b-plain-gate | llama.cpp/qwen3.8-27b:medium | 8 | 8/8 (100%) | 0 | 0/8 (0%) | 0 | 0/0 | 0 | 53 | 8 | 8807 |
+| strata-swift-plain-base | strata/swift-1.5-flash-next-iq3_s:medium | 22 | 20/22 (91%) | 0 | 2/22 (9%) | 0 | 0/0 | 0 | 164 | 16 | 12814 |
+| strata-swift-plain-gate | strata/swift-1.5-flash-next-iq3_s:medium | 22 | 22/22 (100%) | 0 | 0/22 (0%) | 0 | 0/0 | 0 | 165 | 16 | 12909 |
 
 Prompt cache (local model: share of prompt tokens the server did not have to re-read):
 
@@ -19,19 +21,21 @@ Prompt cache (local model: share of prompt tokens the server did not have to re-
 |---|---|---|
 | local-27b-plain-base | 94% | – |
 | local-27b-plain-gate | 95% | – |
+| strata-swift-plain-base | 97% | – |
+| strata-swift-plain-gate | 97% | – |
 
 Hidden tests passed, per task:
 
-| task | claude-plain-base | claude-plain-gate | claude-told-base | claude-told-gate | deepseek-plain-base | deepseek-plain-gate | deepseek-told-base | deepseek-told-gate | local-27b-plain-base | local-27b-plain-gate |
-|---|---|---|---|---|---|---|---|---|---|---|
-| api-migration | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 2/3 | 0/1 | 1/1 |
-| cli-json | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| config-rename | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| duration | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| event-reconcile | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| isoweek | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| logstats | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| presets-ini | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 |
-| schedule-repair | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
-| sqlite-migration | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
-| ttlcache | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – |
+| task | claude-plain-base | claude-plain-gate | claude-told-base | claude-told-gate | deepseek-plain-base | deepseek-plain-gate | deepseek-told-base | deepseek-told-gate | local-27b-plain-base | local-27b-plain-gate | strata-swift-plain-base | strata-swift-plain-gate |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| api-migration | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 2/3 | 0/1 | 1/1 | 2/2 | 2/2 |
+| cli-json | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 2/2 | 2/2 |
+| config-rename | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 2/2 | 2/2 |
+| duration | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 2/2 | 2/2 |
+| event-reconcile | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 2/2 | 2/2 |
+| isoweek | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 2/2 | 2/2 |
+| logstats | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 1/2 | 2/2 |
+| presets-ini | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | 1/1 | 2/2 | 2/2 |
+| schedule-repair | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – | 2/2 | 2/2 |
+| sqlite-migration | – | – | – | – | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – | 1/2 | 2/2 |
+| ttlcache | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/1 | – | 2/2 | 2/2 |

@@ -44,10 +44,11 @@ export function armTable(arms: Map<string, Row[]>): string {
 }
 
 // Only the local model's numbers compare: cloud usage reports cache writes apart from input.
+const isLocal = (model: unknown) => /^(llama\.cpp|strata)\//.test(String(model));
 export function cacheTable(arms: Map<string, Row[]>): string {
 	const out = ["| arm | prompt tokens from cache, all requests | requests right after a gate message: from cache |", "|---|---|---|"];
 	for (const [arm, rows] of arms) {
-		if (!String(rows[0].model).startsWith("llama.cpp/")) continue;
+		if (!isLocal(rows[0].model)) continue;
 		const sum = (k: string) => rows.reduce((a, r) => a + (r[k] ?? 0), 0);
 		const [inp, cr, gi, gc] = [sum("input_tokens"), sum("cache_read_tokens"), sum("after_gate_input"), sum("after_gate_cache_read")];
 		const after = gi + gc ? `${Math.round((100 * gc) / (gi + gc))}% (${gi} new tokens over ${count(rows, (r) => r.gate_rounds > 0)} runs)` : "–";
@@ -72,7 +73,7 @@ export function taskTable(arms: Map<string, Row[]>): string {
 
 export function report(arms = load()): string {
 	if (!arms.size) return "no results\n";
-	const local = [...arms.values()].some((rows) => String(rows[0].model).startsWith("llama.cpp/"));
+	const local = [...arms.values()].some((rows) => isLocal(rows[0].model));
 	return [
 		"# verify-gate bench",
 		armTable(arms),

@@ -125,46 +125,47 @@ What this shows:
   (`told`, gate arm): its own tests passed, but `call(url, null)` sent 0 ms instead of the
   default 30 000. That is the failure this extension targets, and a green check cannot catch it.
   One miss in 33 against none in 33 is noise.
-- **The case the gate is built for has not been measured.** The local 27B stops with "All done"
-  and failing tests more often in the session analysis. Its runs are only partly done (next section).
-  Until then, the mechanism is covered by the unit tests and the smoke test
-  (`verify-gate.smoke.mjs`): the check fails, the agent goes back, history is only appended to,
-  the check passes, and the run ends.
+- **The case the gate is built for did not come up locally either** (next section): no local run
+  stopped with a red project check, so the gate never sent an agent back. The mechanism is covered
+  by the unit tests and the smoke test (`verify-gate.smoke.mjs`): the check fails, the agent goes
+  back, history is only appended to, the check passes, and the run ends.
 
-### Local 27B: pending (partial: 19/132, local runs now only at night)
+### Results (local), 2026-10-20: reduced sample
 
-These are partial numbers, not a result. On 2026-10-19 the `local-27b-plain` series was stopped
-after 16 of its 132 runs: the GPUs were reserved for Strata (HML-4) and the router model was
-unloaded. HRN-13 resumed them and added 3 gate-arm runs before local GPU work moved to the night
-(00:00-08:00); it continues there. What finished, `plain` prompt, round 1 only:
+**This sample is smaller than the cloud's: 2 rounds with the `plain` prompt only, against 3 rounds
+with both prompts in the cloud.** The owner cut the local series short to save GPU time. The local
+model is **Swift 1.5 Qwen3.8-Flash-Next IQ3_S on Strata**
+(`strata/swift-1.5-flash-next-iq3_s:medium`), not the Qwen3.8-27B on the llama.cpp router that was
+planned. The router stayed off for this task, and Strata was the local server it could use.
 
-| arm | runs | hidden tests pass | own check green, hidden red | gate checks / failures | mean wall s |
-|---|---|---|---|---|---|
-| local-27b-plain-base | 11 of 33 | 10/11 | 1 (api-migration) | – | 114.0 |
-| local-27b-plain-gate | 8 of 33 | 8/8 | 0 | 8 / 0 | 130.1 |
+| model | prompt | runs per arm | hidden tests pass, base → gate | own check green, hidden red, base / gate | project check red when the agent stopped | gate sent the agent back | mean wall s, base → gate |
+|---|---|---|---|---|---|---|---|
+| Strata Swift 1.5 Flash-Next | plain | 22 (2 rounds) | 20 → 22 | 2 / 0 | 0 | 0 (22 checks, all green) | 187 → 193 |
+| *cloud, for comparison:* deepseek-flash | plain | 33 (3 rounds) | 33 → 33 | 0 / 0 | 0 | 0 | 20.0 → 19.2 |
 
-- The base-arm miss is the self-confirming case, again on api-migration: its own tests passed, the
-  hidden test failed (actual 0, expected 30000). The project's check was green, so the gate would
-  not have caught it. Only the prompt line can.
-- The gate never sent the agent back in these runs, so the prompt-cache table (the request right
-  after a gate message) has no local data yet.
-- Too few runs to compare the arms. The gate arm has the eight tickets that came first in order
-  (`schedule-repair`, `sqlite-migration` and `ttlcache` r1 are next).
-- The earlier tries failed for other reasons. They shared the single-slot router with three other
-  benchmarks, their requests hit pi's 5-minute timeout, and none finished. After that, the HML-2
-  Strata trial kept local models off.
-- **To do**, with nothing else on the router:
-  1. `bench/run-all.sh local-27b-plain llama.cpp/qwen3.8-27b:medium 3 plain`: arms
-     `local-27b-plain-base` and `-gate`, all 11 tickets, 3 rounds (66 runs).
-  2. `bench/run-all.sh local-27b-told llama.cpp/qwen3.8-27b:medium 3 told`: the same with the
-     `told` prompt (66 runs).
-  3. The prompt-cache table in `bench/results/summary.md`: the share of prompt tokens read from
-     cache on the request right after a gate message, against all requests. This checks on the
-     hybrid model that the appended message keeps its cache.
-  4. Put the rows into the table above, and update the reading. The 19 partial runs in
-     `bench/results/local-27b-plain-*.jsonl` count toward step 1 (`run.ts` resumes and skips runs it already has).
-- **Optional, also pending:** the remaining Claude runs (`presets-ini` and `sqlite-migration`,
-  4 arms × 3 rounds), once the Anthropic key works again.
+- **Both base-arm misses are self-confirming tests**, the failure the prompt line targets:
+  - `logstats` r1: the agent's own tests passed, but the hidden test's event at `2027-01-01T00`
+    was dropped.
+  - `sqlite-migration` r2: the agent's own tests passed, but the result was `[[1, 2]]` where
+    `[[2]]` was expected.
+
+  In both, the project's check was green, so the gate itself could not have caught them.
+- **The gate arm's 22/22 is not the gate's doing.** All 22 of its checks passed, and it never sent
+  an agent back. On 22 runs per arm, 20/22 against 22/22 is within run-to-run noise. The gate arm
+  also carries the prompt line about independent tests, but this sample is too small to show
+  whether that helped.
+- **Cost:** one check run per prompt. Median wall time (164 s vs 165 s) and output per run
+  (12.8k vs 12.9k tokens) are the same in both arms.
+- **Prompt cache:** 97 % of prompt tokens came from the cache, in both arms
+  (`bench/results/summary.md`). No request came right after a gate message, so the
+  appended-message case is still unmeasured on a local model.
+- **Earlier partial runs on the 27B:** 19 runs on `llama.cpp/qwen3.8-27b:medium` finished before
+  the router went offline. Base passed 10/11 (the miss, on api-migration, was self-confirming) and
+  gate passed 8/8. The rows stay in `bench/results/local-27b-plain-*.jsonl` and `summary.md`. They
+  are too few to read on their own.
+- **Not run:** the local `told` series and a third round. The Claude runs for `presets-ini` and
+  `sqlite-migration` (4 arms × 3 rounds) are still missing, because the Anthropic key in the pi
+  config fails.
 
 ## Files
 
