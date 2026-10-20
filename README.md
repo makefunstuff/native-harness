@@ -110,7 +110,9 @@ scripts/check.sh          repository check (CI)
 
 - **2026-10-20: `experimental/llama-native`** — the in-process llama.cpp provider (extension, C++
   addon, benchmark, results). It needed a llama.cpp build and a compiled addon, measured the same
-  tickets over HTTP and in-process, and lost: the answer is in its `RESULTS.md`, which is in the
+  tickets over HTTP and in-process, and lost: same kernels, so the same decode and prefill speeds,
+  and llama-server's prompt cache already reuses ~92% of the prompt in an agent loop, so there was
+  nothing left for in-process to win. The measurements are in its `RESULTS.md`, which is in the
   history — `git log --oneline -- experimental/llama-native` for the commits,
   `git show <commit>:experimental/llama-native/RESULTS.md` to read it.
 - **2026-10-20: Python.** The benches were Python (a runner, a reporter, a proxy, ticket generators

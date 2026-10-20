@@ -7,8 +7,8 @@
 // Row fields are named by the runner that wrote them (`in_miss`/`in_hit` from the shared bench,
 // `in`/`cache_read` from the recorded rows of the earlier benches), so a column reads the first name
 // it finds.
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fmt, mean, median, readRows, table } from "./util.ts";
 
 export type Row = Record<string, any>;
@@ -111,6 +111,7 @@ export function costTable(arms: [string, Row[]][], opts: { gate?: (arm: string) 
 }
 
 export function writeSummary(path: string, sections: string[], title = "# Summary") {
+	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, [title, "", ...sections.map((s) => s.trimEnd())].join("\n").trimEnd() + "\n");
 }
 

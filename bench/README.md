@@ -8,7 +8,7 @@ on node (no build step: node strips the types).
 ```bash
 node bench/run.ts --bench pi-extras --tasks all --arms off,verify-gate --rounds 2
 node bench/run.ts --bench d3-context --arms base,d3 --rounds 2   # after gen-long-tasks.ts
-node bench/report.ts --bench pi-extras        # → bench/results/summary.md
+node bench/report.ts --bench pi-extras        # → bench/results/pi-extras/summary.md
 node bench/selftest.ts                        # tickets, no model
 node bench/run.ts --bench pi-extras --tasks cli-json --arms off --dry-run --out /tmp/dry.jsonl
 ```
@@ -31,7 +31,7 @@ the tool output, which is not repo data.
 | path | what |
 |---|---|
 | `run.ts` | the runner CLI: `--bench`, `--tasks`, `--arms`, `--rounds`, `--model`, `--workers`, `--timeout`, `--dry-run` |
-| `report.ts` | → `results/summary.md`: pass rate, wall time, turns, calls, edits, tokens, cost, per arm and task |
+| `report.ts` | → `bench/results/<bench>/summary.md`: pass rate, wall time, turns, calls, edits, tokens, cost, per arm and task. A recorded experiment's own `results/summary.md` is data, never overwritten from here |
 | `selftest.ts` | every ticket: the broken repo fails the hidden tests, repo + reference passes them and its own tests |
 | `gen-bulk-rename.ts` | generates `tickets/bulk-rename` (deterministic; the generated tree is committed) |
 | `lib/pi.ts` | one pi session, the way the CLI makes one: `agentCopy` (a copy of `~/.pi/agent`, never the real one), `openSession`, `runPrompt`, `runSteps` |
@@ -81,5 +81,7 @@ repeats, re-reads, provider errors), the ticket's `hidden_tail`, and the arm's o
 `lib/session.ts` (list prices, kept in the repo so a table can be read years later). A run with a
 provider error, a timeout, or a `session` that did not finish is kept in the rows and excluded from
 the performance means by `perf()`, never silently dropped. The recorded `results/` of the
-experiments are data from past runs; the code that produced them is TypeScript, and where a
-recorded run predates the current code, the README of that experiment says so.
+experiments are data from past runs, and the code in this repo is all TypeScript: where a recorded
+series was measured by code that has since been replaced — the d3-context runs of February 2026 ran
+on this experiment's own Python scripts, removed in October 2026 — the README of that experiment
+says so, and points at the TypeScript equivalents that reproduce the measurements.
