@@ -68,8 +68,8 @@ filter. To try it for one run: `pi -e ./extensions/local-edit/index.ts`.
 
 Measured on 2026-10-19 with pi 1.3.0. Two measurements: an offline replay of real sessions,
 and a live bench through pi's SDK. Both are TypeScript: `bench/replay.mjs`, and
-`bench/run.ts` with `bench/report.ts`. The local 27B part of the live bench is **not done
-yet** (see *Local 27B: pending* below).
+`bench/run.ts` with `bench/report.ts`. The local part of the live bench is a reduced sample
+(section 4).
 
 ### 1. Replay of real sessions
 
@@ -81,15 +81,19 @@ fail edits on purpose. For every edit call it rebuilds the file as the model saw
 the call through pi's own edit tool and through local-edit's matcher. Snapshot:
 [`bench/results/replay.json`](bench/results/replay.json).
 
-| | local (llama.cpp) | cloud |
-|---|---:|---:|
-| sessions / edit calls | 22 / 86 | 306 / 294 |
-| failed edits with pi's edit | 8 (9.3 %) | 4 (1.4 %) |
-| … of which the file content could be rebuilt | 5 | 2 |
-| … placed by local-edit | 1 (98.9 % similar, a typo in a 28-line `oldText`) | 0 |
-| … still refused, with a better message | 4 | 2 |
-| successful edits replayed: same file with local-edit | 35 / 35 | 105 / 105 |
-| **edit error rate** | **9.3 % → 8.1 %** | 1.4 % → 1.4 % |
+| | local: llama.cpp | local: Strata | cloud |
+|---|---:|---:|---:|
+| sessions / edit calls | 42 / 111 | 52 / 265 | 450 / 329 |
+| failed edits with pi's edit | 11 (9.9 %) | 21 (7.9 %) | 4 (1.2 %) |
+| … of which the file content could be rebuilt | 6 | 7 | 2 |
+| … placed by local-edit | 1 (98.9 % similar, a typo in a 28-line `oldText`) | 2 (similarity, e.g. 97.2 % on a 14-line block) | 0 |
+| … still refused, with a better message | 5 | 5 | 2 |
+| successful edits replayed: same file with local-edit | 49 / 49 | 111 / 111 | 127 / 127 |
+| **edit error rate** | **9.9 % → 9.0 %** | **7.9 % → 7.2 %** | 1.2 % → 1.2 % |
+
+Re-run on 2026-10-20, after the local runs of HRN-13. The session set grew since the first
+snapshot (22 local sessions then): it now includes the local bench sessions of verify-gate, and
+the Strata (Swift 1.5 Flash-Next) sessions on this machine, which the replay now counts as local.
 
 The refusals are right to refuse:
 - `oldText` lines that are not in the file at all (the model made them up).
@@ -99,8 +103,9 @@ The refusals are right to refuse:
   exactly that.
 - A duplicate. local-edit gives the line numbers of both places.
 
-None of the 140 successful edits changes outcome under local-edit. The sample is small, and only
-5 of the 8 local failures could be rebuilt, so read 9.3 % → 8.1 % as a direction, not a rate.
+None of the 287 successful edits changes outcome under local-edit. Only 13 of the 32 local
+failures could be rebuilt, so read the local rates as a direction, not a measurement: local-edit
+places about one rebuilt failure in four, and refuses the rest with a clearer message.
 These sessions include none of the basename or `path#tag` failures that the findings doc counts
 in OMP's hashline sessions. The tree those OMP sessions edited has changed since, so those calls
 cannot be replayed reliably and are not counted.
@@ -192,26 +197,26 @@ The task asked for the homelab evals too. Their coding tasks
 no-Python rule for this repository rules them out until they are ported, so they are not part of
 these numbers.
 
-### Local 27B: pending
+### 4. Live bench, local: reduced sample
 
-The router was taken for the HML-2 trial before the local runs finished. No local model was used
-after that. A separate task runs these:
+**One round per arm, against six rounds in the cloud run** (the owner cut the local series short to
+save GPU time). The model is **Swift 1.5 Qwen3.8-Flash-Next IQ3_S on Strata**
+(`strata/swift-1.5-flash-next-iq3_s:medium`), not the Qwen3.8-27B on the llama.cpp router that was
+planned. The router stayed off for this task. The tickets, arms and grading are the same as in
+section 2 (`bench/run.ts strata-base|strata-local-edit --first-round 1`, plus `report.ts`).
 
-```bash
-cd extensions/local-edit/bench
-node run.ts local-base       --model llama.cpp/qwen3.8-27b:medium --edit base       --rounds 6
-node run.ts local-local-edit --model llama.cpp/qwen3.8-27b:medium --edit local-edit --rounds 6
-node report.ts
-# or: ./run-all.sh local 6   (same runs, rounds alternating between the arms)
-```
+| arm | runs | hidden tests pass | edit calls | edit errors | placed loosely | untouched-code check failed | edits dropping ≥ 3 lines | median wall s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| base (pi's edit), Strata | 3 | 3/3 | 8 | 0 | – | 0/3 | 0 | 59 |
+| local-edit, Strata | 3 | 3/3 | 6 | 0 | 0 | 0/3 | 0 | 56 |
+| *base, 27B, partial (before the router went off)* | 2 | 2/2 | 4 | 0 | – | 0/2 | 0 | 240 |
+| *local-edit, 27B, partial* | 2 | 2/2 | 4 | 0 | 0 | 0/2 | 0 | 269 |
 
-- **Done:** `edit-handlers` r1 and `edit-table` r1 in both arms (4 runs, in
-  `bench/results/local-*.jsonl`): all passed, 8 edit calls, no edit errors.
-- **To do (32 runs):** in `local-base` and in `local-local-edit`, `edit-tabs` r1, then all three
-  tickets for rounds 2–6.
-- The runner resumes, so the runs that are done are skipped.
-- After that, re-run `replay.mjs` for the new local sessions, and fill in this section: edit
-  error rate, loose placements, untouched-code failures and pass rate per arm.
+- **No regression, and nothing to tell the arms apart.** Like DeepSeek Flash, the local model made
+  no failed edit on these tickets, so local-edit had nothing to rescue. Its value on local models
+  rests on the replay above, where the failures do occur.
+- Six runs (plus four on the 27B) are too few for more than that. Full tables:
+  [`bench/results/summary.md`](bench/results/summary.md).
 
 ## Files
 

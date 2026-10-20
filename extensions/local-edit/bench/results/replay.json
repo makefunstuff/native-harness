@@ -1,28 +1,28 @@
 {
  "local": {
-  "sessions": 22,
-  "edits": 86,
-  "failed": 8,
-  "failedKnown": 5,
+  "sessions": 94,
+  "edits": 376,
+  "failed": 32,
+  "failedKnown": 13,
   "unreliable": 0,
-  "recovered": 1,
+  "recovered": 3,
   "recoveredHow": {
-   "similarity": 1
+   "similarity": 3
   },
-  "stillFailing": 4,
+  "stillFailing": 10,
   "stillHow": {
-   "not found (candidates shown)": 3,
-   "other": 1
+   "not found (candidates shown)": 8,
+   "other": 2
   },
   "pathFailed": 0,
   "pathRecovered": 0,
-  "okKnown": 35,
-  "okSame": 35,
+  "okKnown": 160,
+  "okSame": 160,
   "okDifferent": 0
  },
  "cloud": {
-  "sessions": 306,
-  "edits": 294,
+  "sessions": 450,
+  "edits": 329,
   "failed": 4,
   "failedKnown": 2,
   "unreliable": 0,
@@ -35,8 +35,8 @@
   },
   "pathFailed": 0,
   "pathRecovered": 0,
-  "okKnown": 105,
-  "okSame": 105,
+  "okKnown": 127,
+  "okSame": 127,
   "okDifferent": 0
  }
 }

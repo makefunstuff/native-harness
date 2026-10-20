@@ -53,7 +53,7 @@ function files(dir) {
 	return out;
 }
 
-const LOCAL = /^(llama\.cpp|llama-native|ollama|lmstudio|vllm)$/;
+const LOCAL = /^(llama\.cpp|llama-native|ollama|lmstudio|vllm|strata)$/;
 const base = createEditToolDefinition(process.cwd());
 const prep = (a) => repairArguments(a, base.prepareArguments);
 
