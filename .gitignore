@@ -1,6 +1,5 @@
 node_modules/
-__pycache__/
-*.pyc
+bench/results/
 experimental/llama-native/native/build/
 experimental/llama-native/bench/work/
 experimental/llama-native/results/raw/**/*.session/
