@@ -18,6 +18,8 @@ export function loadArms(rawDir: string): Map<string, Row[]> {
 	if (!existsSync(rawDir)) return out;
 	for (const f of readdirSync(rawDir).filter((f) => f.endsWith(".jsonl")).sort()) {
 		const rows = readRows(join(rawDir, f));
+		// where a row came from: a report needs the per-run artifacts next to its rows
+		for (const r of rows) Object.defineProperty(r, "_file", { value: join(rawDir, f), enumerable: false });
 		if (rows.length) out.set(f.replace(/\.jsonl$/, ""), rows);
 	}
 	return out;

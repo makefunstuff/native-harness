@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates bench/tickets/bulk-rename (deterministic): a 12-module package whose money API is
-// renamed. TypeScript port of the ticket the llama-native bench used to generate in Python.
+// renamed. This generator is the TypeScript port of the Python one that made the ticket.
 //
 //   node bench/gen-bulk-rename.ts
 //

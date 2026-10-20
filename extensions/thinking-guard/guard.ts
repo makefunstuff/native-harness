@@ -8,7 +8,7 @@ import { join } from "node:path";
 export interface GuardConfig {
 	/** Master switch. */
 	enabled: boolean;
-	/** Which models are guarded: "local" (loopback, private-network and llama-native models) or "all". */
+	/** Which models are guarded: "local" (loopback and private-network models) or "all". */
 	scope: "local" | "all";
 	/** Abort a reply once its thinking passes this many characters (no budget sent). */
 	maxThinkingChars: number;
@@ -121,10 +121,9 @@ export interface ModelLike {
 	reasoning?: boolean;
 }
 
-/** Runs on this machine or the local network (or in pi's own process, llama-native). */
+/** Runs on this machine or the local network. */
 export function isLocalModel(model: ModelLike | undefined): boolean {
 	if (!model) return false;
-	if (model.provider === "llama-native" || model.api === "llama-native") return true;
 	if (!model.baseUrl) return false;
 	try {
 		return isPrivateHost(new URL(model.baseUrl).hostname);

@@ -19,15 +19,12 @@
   "files": [
     "extensions",
     "!extensions/*/bench",
-    "experimental/llama-native/extension",
-    "experimental/llama-native/configs",
     "README.md",
     "LICENSE"
   ],
   "pi": {
     "extensions": [
-      "./extensions/*/index.ts",
-      "./experimental/llama-native/extension/index.ts"
+      "./extensions/*/index.ts"
     ]
   },
   "engines": {

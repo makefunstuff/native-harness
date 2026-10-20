@@ -1,9 +1,5 @@
 node_modules/
 bench/results/
-experimental/llama-native/native/build/
-experimental/llama-native/bench/work/
-experimental/llama-native/results/raw/**/*.session/
-experimental/llama-native/results/raw/*/
 experimental/d3-context/bench/tasks-long/
 experimental/d3-context/results/raw/*/
 experimental/d3-context/results/invalid/*/

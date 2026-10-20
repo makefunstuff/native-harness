@@ -13,7 +13,6 @@ extension on or off on its own.
 | [`loop-guard`](extensions/loop-guard/README.md) | notices blind retries of a failed tool call, repeated no-progress calls and runs that stop on "I'll …" with no tool call, and appends a short correction (never rewrites history, so the prompt cache stays) | stable |
 | [`thinking-guard`](extensions/thinking-guard/README.md) | stops runaway thinking: gives llama.cpp servers a per-request thinking budget, and aborts and re-issues a reply that still thinks too long, with a "stop deliberating, act with a tool" note appended (append-only, so the prompt cache survives) | on for local models |
 | [`verify-gate`](extensions/verify-gate/README.md) | runs the project's check (`.pi/verify` or AGENTS.md) before the agent may finish after editing files; on failure the agent gets the output for another round (at most 2). Adds a prompt line: tests must not share assumptions with the code | stable |
-| [`llama-native`](experimental/llama-native/README.md) | runs llama.cpp inside pi's own process as a model provider (`llama-native/…`); needs a llama.cpp build and a native addon you compile, does nothing without it. Results: [RESULTS.md](experimental/llama-native/RESULTS.md) | **experimental** |
 | [`d3-context`](experimental/d3-context/README.md) | lets a local decision model (vllm-d3 over the System One wire) keep, summarise or drop old tool output and pin key lines, editing the context at subtask boundaries; needs `D3_URL`, not in the package manifest (load with `pi -e`). Result: no gain, higher cost with cached providers: [RESULTS.md](experimental/d3-context/RESULTS.md) | **experimental** |
 
 Each extension lives in its own folder under `extensions/<name>/` with its own README;
@@ -49,7 +48,7 @@ or filter in `settings.json` (`-path` drops one extension, `[]` drops all of the
   "packages": [
     {
       "source": "git:github.com/makefunstuff/pi-extras",
-      "extensions": ["-experimental/llama-native/extension/index.ts"]
+      "extensions": ["-extensions/lessons/index.ts"]
     }
   ]
 }
@@ -76,30 +75,48 @@ pi install "$PWD"              # use your checkout as the installed package
   package into it the way users do, `pi install git:github.com/makefunstuff/pi-extras`, served
   from a snapshot of the working tree (so without the dev `node_modules`), adds a mock
   OpenAI-compatible model on loopback, and runs `pi -p`: the package must load next to everything
-  else in the config, with no extension errors, and the llama-native provider code must load
-  (with a stand-in addon). It then runs every
+  else in the config, with no extension errors. It then runs every
   `*.smoke.mjs` spec, which scripts the mock model's answers (tool calls included) and checks
   the output; see [`templates/extension/template.smoke.mjs`](templates/extension/template.smoke.mjs).
   `PI_EXTRAS_SMOKE_CONFIG=empty|copy` picks the config, `PI_EXTRAS_SMOKE_INSTALL=path` skips
   the git install, `PI_EXTRAS_SMOKE_MODEL=provider/id` runs
   the first step on a real model instead of the mock.
+- **Bench**: [`bench/`](bench/README.md) is one shared bench for every extension and experiment:
+  tickets (`issue.md`, `repo/`, `hidden.test.ts`, `ref/`), arms, pi driven in-process through its
+  SDK (`createAgentSession`), and reports over recorded rows. `node bench/run.ts --bench pi-extras`,
+  `--bench d3-context`; `node bench/selftest.ts` checks the tickets without a model, and
+  `--dry-run` checks the harness the same way.
 - **Dependencies**: runtime packages an extension imports go in `dependencies`. pi provides
   `@earendil-works/pi-*` and `typebox` itself: import them, never list them in `dependencies` or
   `peerDependencies` (next to the pi devDependency, npm would then lock them for production and
   git installs would get their own copy); `test/package.test.mjs` checks this.
 - **CI**: [GitHub Actions](.github/workflows/ci.yml) runs `scripts/check.sh` on Node 22 and 24.
-  `PI_EXTRAS_NATIVE_CHECK=1 scripts/check.sh` also builds the llama-native addon (local only,
-  needs llama.cpp).
+  It starts with a **no-Python check**: a `.py` file, tracked or not, or a Python config file
+  (`requirements.txt`, `pyproject.toml`, …) fails the run. Everything in this repo is TypeScript
+  and runs on node.
 
 ## Layout
 
 ```
 extensions/<name>/        one folder per extension (index.ts, tests, README)
-experimental/llama-native the in-process llama.cpp experiment: extension, native addon, benchmark, results
+experimental/<name>/      an experiment: extension, bench, results (its own README)
+bench/                    the shared bench: tickets, arms, pi in-process through its SDK, reports
 templates/extension/      starting point for a new extension
 test/                     unit-test runner, smoke test, shared harness (mock model, config copy, fake pi)
 scripts/check.sh          repository check (CI)
 ```
+
+## Removed
+
+- **2026-10-20: `experimental/llama-native`** — the in-process llama.cpp provider (extension, C++
+  addon, benchmark, results). It needed a llama.cpp build and a compiled addon, measured the same
+  tickets over HTTP and in-process, and lost: the answer is in its `RESULTS.md`, which is in the
+  history — `git log --oneline -- experimental/llama-native` for the commits,
+  `git show <commit>:experimental/llama-native/RESULTS.md` to read it.
+- **2026-10-20: Python.** The benches were Python (a runner, a reporter, a proxy, ticket generators
+  per experiment). They are one TypeScript bench now, `bench/`, driving pi in-process through its
+  SDK; ticket repos and hidden tests are TypeScript, graded with `node --test`. The recorded runs
+  stay as data (`.jsonl` rows, summary tables, `RESULTS.md`), and CI fails if a `.py` file appears.
 
 ## License
 

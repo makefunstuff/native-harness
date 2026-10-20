@@ -2,7 +2,7 @@
 // The shared bench: run tickets against pi in-process, one arm at a time, appending one row per run.
 //
 //   node bench/run.ts [options]
-//     --bench NAME      pi-extras (default) | d3-context | llama-native
+//     --bench NAME      pi-extras (default) | d3-context
 //     --tasks a,b|all   tickets (default: all under the bench's ticket root)
 //     --arms a,b        arms (default: every arm of the bench that is available)
 //     --rounds N        rounds per ticket (default 1)

@@ -5,7 +5,7 @@
 //   node extensions/loop-guard/bench/replay.ts DIR... [--json]
 //
 // DIR: session folders (searched for *.jsonl), e.g. ~/.pi/agent/sessions ~/.omp/agent/sessions.
-// Assistant messages from provider "llama.cpp" (or a llama-native model) count as local, the rest
+// Assistant messages from a local provider ("llama.cpp", "ollama", …) count as local, the rest
 // as cloud. Per class it reports, per tool call:
 //   exact retry   the call repeats the previous call (same tool, byte-identical arguments) and
 //                 that call failed (the metric of the 2026-10-12 session analysis);
@@ -39,7 +39,7 @@ export interface Stats {
 
 const blank = (): Stats => ({ sessions: 0, turns: 0, calls: 0, errors: 0, exactRetry: 0, retry: 0, repeat: 0, streak: 0, afterRetrySame: 0, afterRetryOther: 0, afterRetryNone: 0, finals: 0, stall: 0, stallNudgedByUser: 0, otherFinalsNudgedByUser: 0 });
 const GO_ON = /^\s*(continue|go on|go ahead|proceed|do it|keep going|carry on|yes|ok(ay)?|please do|next|and\??|well\??|\.+|\?+)\b/i;
-const isLocal = (m: any) => m.provider === "llama.cpp" || m.provider === "llama-native" || /^(llama\.cpp|llama-native)\//.test(m.model ?? "");
+const isLocal = (m: any) => /^(llama\.cpp|ollama|lmstudio|vllm|strata)(\/|$)/.test(`${m.provider ?? ""}/${m.model ?? ""}`);
 
 export function sessionFiles(dirs: string[]): string[] {
 	const files: string[] = [];

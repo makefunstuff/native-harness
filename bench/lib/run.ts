@@ -22,7 +22,7 @@ export interface RunContext {
 	sessDir: string;
 	outDir: string;
 	tmp: string;
-	/** Where a per-request logger (the HTTP proxy, the llama-native extension) writes for this run. */
+	/** Where a per-run log of an extension's own decisions (its metrics file) belongs. */
 	metricsPath: string;
 }
 
@@ -148,6 +148,8 @@ export async function runTicket(o: RunOpts): Promise<RunRow> {
 			agent_rc: error ? 1 : 0,
 			error,
 			diffstat: diff.split("\n")[0] ?? "",
+			/** Where the transcript of this run is (the cache, outside the repo); "~" for the home. */
+			session_dir: sessDir.replaceAll(homedir(), "~"),
 			...st,
 			...extra,
 			hidden_tail: hid.tail.slice(-600).replaceAll(work, ".").replaceAll(homedir(), "~"),

@@ -7,7 +7,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { REPO } from "./lib/harness.mjs";
 
-const roots = ["bench", "extensions", "templates", "experimental/llama-native/extension", "experimental/d3-context/extension", "test"].map((r) => join(REPO, r));
+const roots = ["bench", "extensions", "templates", "experimental/d3-context/extension", "experimental/d3-context/bench/lib", "test"].map((r) => join(REPO, r));
 const files = [];
 const walk = (dir) => {
 	for (const d of readdirSync(dir, { withFileTypes: true })) {

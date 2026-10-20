@@ -23,8 +23,8 @@ budget changes sampling, not the prompt; pi drops aborted replies from the conte
 re-issued request is the previous one plus the note.
 
 By default only **local models** are guarded: models on loopback or a private network
-(10/8, 172.16/12, 192.168/16, 100.64/10, `*.local`, `*.lan`, single-label hosts…) and the
-in-process `llama-native` provider. The budget is only sent where `GET /props` answers like
+(10/8, 172.16/12, 192.168/16, 100.64/10, `*.local`, `*.lan`, single-label hosts…).
+The budget is only sent where `GET /props` answers like
 llama-server (or its router); the result is cached per server.
 
 ## Does our llama.cpp honour a per-request thinking budget?

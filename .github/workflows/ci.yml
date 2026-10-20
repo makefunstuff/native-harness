@@ -17,9 +17,12 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      # every script in this repo is TypeScript: no Python, no Python config, no setup-python
+      - name: No Python
+        run: |
+          test -z "$(git ls-files | grep -E '\.py$' || true)" || { echo "tracked .py files"; git ls-files | grep -E '\.py$'; exit 1; }
+          test -z "$(find . -name '*.py' -not -path './node_modules/*' || true)" || { echo ".py files (untracked)"; find . -name '*.py' -not -path './node_modules/*'; exit 1; }
+          ! ls requirements.txt pyproject.toml setup.py setup.cfg pytest.ini tox.ini .python-version 2>/dev/null | grep -q .
       - run: npm ci --ignore-scripts --no-audit --no-fund
       # no ~/.pi/agent on the runner: the smoke test runs pi on an empty config
       - run: scripts/check.sh

@@ -29,6 +29,14 @@ export interface SessionStats {
 	repeat_calls: number;
 	repeat_max: number;
 	top_repeats: string;
+	/**
+	 * Calls that read a file the session had already read before: the background rate of going back
+	 * to a file. The context experiment compares this against the re-reads of files the router
+	 * dropped (`refetch`, computed from the extension's log).
+	 */
+	rereads: number;
+	reread_paths: number;
+	reread_cases: string[];
 	provider_errors: number;
 	custom_messages: number;
 	/** Messages a pi-extras extension added (a tip): counted by their custom type. */
@@ -54,6 +62,7 @@ function emptyStats(): SessionStats {
 		assistant_turns: 0, tool_calls: 0, tool_errors: 0, tool_uniq: 0, edit_calls: 0, edit_errors: 0, malformed_calls: 0,
 		in_miss: 0, in_hit: 0, in_write: 0, out: 0, reasoning: 0, ctx_peak: 0, ctx_mean: 0, ctx_sum_over_turns: 0, tokens_processed: 0,
 		compactions: 0, compaction_ms: 0, repeat_calls: 0, repeat_max: 0, top_repeats: "—", provider_errors: 0, custom_messages: 0, tips: 0,
+		rereads: 0, reread_paths: 0, reread_cases: [],
 		models: [], stop: null, error_turns: 0, last_error: "",
 	};
 }
@@ -64,6 +73,7 @@ export function sessionStats(entries: any[]): SessionStats {
 	const ctx: number[] = [];
 	const seen = new Set<string>();
 	const counts = new Map<string, number>();
+	const reread = new Map<string, number>();
 	const names = new Set<string>();
 	const models = new Set<string>();
 	for (const e of entries as any[]) {
@@ -98,6 +108,13 @@ export function sessionStats(entries: any[]): SessionStats {
 					const k = callKey(c);
 					counts.set(k, (counts.get(k) ?? 0) + 1);
 					if (counts.get(k)! > 1) s.repeat_calls++;
+					const back = [...pathsOf(c)].filter((p) => seen.has(p));
+					if (back.length) {
+						s.rereads++;
+						for (const p of back) reread.set(p, (reread.get(p) ?? 0) + 1);
+						if (s.reread_cases.length < 10) s.reread_cases.push(`${back.join(", ")} <- ${c.name ?? "?"}`.slice(0, 160));
+					}
+					for (const p of pathsOf(c)) seen.add(p);
 				}
 				// a tool call the model wrote as plain text instead of calling
 				if (c?.type === "text" && (String(c.text ?? "").includes("<tool_call>") || String(c.text ?? "").includes("<function="))) s.malformed_calls++;
@@ -118,6 +135,7 @@ export function sessionStats(entries: any[]): SessionStats {
 	s.tokens_processed = s.in_miss + s.in_hit + s.out;
 	s.tool_uniq = names.size;
 	s.repeat_max = Math.max(0, ...counts.values());
+	s.reread_paths = reread.size;
 	s.top_repeats = [...counts.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, n]) => `${JSON.parse(k)[0]} ${n}x`).join(", ") || "—";
 	s.models = [...models];
 	return s;
