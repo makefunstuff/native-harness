@@ -91,9 +91,11 @@ pi install "$PWD"              # use your checkout as the installed package
   `peerDependencies` (next to the pi devDependency, npm would then lock them for production and
   git installs would get their own copy); `test/package.test.mjs` checks this.
 - **CI**: [GitHub Actions](.github/workflows/ci.yml) runs `scripts/check.sh` on Node 22 and 24.
-  It starts with a **no-Python check**: a `.py` file, tracked or not, or a Python config file
-  (`requirements.txt`, `pyproject.toml`, …) fails the run. Everything in this repo is TypeScript
-  and runs on node.
+  It starts with a **no-Python check** (`scripts/no-python.sh`): a Python file — `.py`, `.pyc`,
+  `__pycache__`, tracked, untracked, or written by a ticket generator — or a Python config file
+  (`requirements.txt`, `pyproject.toml`, …) fails the run. `scripts/check.sh` runs the same check
+  first and last, so a generated ticket tree is covered too. Everything in this repo is TypeScript
+  and runs on node; `npm ci` is the only install.
 
 ## Layout
 
@@ -104,17 +106,23 @@ bench/                    the shared bench: tickets, arms, pi in-process through
 templates/extension/      starting point for a new extension
 test/                     unit-test runner, smoke test, shared harness (mock model, config copy, fake pi)
 scripts/check.sh          repository check (CI)
+scripts/no-python.sh      the no-Python rule (CI's first step, called by check.sh)
 ```
 
 ## Removed
 
 - **2026-10-20: `experimental/llama-native`** — the in-process llama.cpp provider (extension, C++
-  addon, benchmark, results). It needed a llama.cpp build and a compiled addon, measured the same
-  tickets over HTTP and in-process, and lost: same kernels, so the same decode and prefill speeds,
-  and llama-server's prompt cache already reuses ~92% of the prompt in an agent loop, so there was
-  nothing left for in-process to win. The measurements are in its `RESULTS.md`, which is in the
-  history — `git log --oneline -- experimental/llama-native` for the commits,
-  `git show <commit>:experimental/llama-native/RESULTS.md` to read it.
+  addon, benchmark, results). It was the original experiment of this repo, the one pi-extras grew
+  out of, and it is deleted: it needed a llama.cpp build and a compiled addon, it measured the same
+  tickets over HTTP and in-process, and it lost — same kernels, so the same decode and prefill
+  speeds, and llama-server's prompt cache already reuses ~92% of the prompt in an agent loop, so
+  there was nothing left for in-process to win. Nothing in this repo refers to it any more: the
+  benches (`bench/`, and each extension's own) name an extension, a provider or a model, and the
+  extensions that guard local models detect them by host and provider name.
+  Its code, its results and its `RESULTS.md` stay in git history —
+  `git log --oneline -- experimental/llama-native` for the commits, and
+  `git show "$(git log -1 --format=%H --diff-filter=D -- experimental/llama-native)^:experimental/llama-native/RESULTS.md"`
+  for the report as it stood before the removal.
 - **2026-10-20: Python.** The benches were Python (a runner, a reporter, a proxy, ticket generators
   per experiment). They are one TypeScript bench now, `bench/`, driving pi in-process through its
   SDK; ticket repos and hidden tests are TypeScript, graded with `node --test`. The recorded runs

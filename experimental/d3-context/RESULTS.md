@@ -170,7 +170,8 @@ within 3 turns:
 - base, for comparison: 32% of all file reads are re-read within 3 turns anyway.
 
 Most re-reads are therefore normal working style: narrower `sed -n` ranges, verification with
-`git diff`. Reading the candidates by hand (`bench/ctx_quick_refetch.py --show`):
+`git diff`. Reading the candidates by hand (then `bench/ctx_quick_refetch.py --show`, today
+`experimental/d3-context/bench/quick-refetch.ts --show`):
 - **d3-flash, about 7 real cases in 6 of 22 runs:**
   - the config spec (config-validator r1),
   - `kv/cli.py` (issue-triage r1),

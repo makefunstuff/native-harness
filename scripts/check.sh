@@ -6,15 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -x node_modules/.bin/pi ] || npm ci --ignore-scripts --no-audit --no-fund
+# Every script in this repo is TypeScript, and the no-Python rule (scripts/no-python.sh) is checked
+# first (fast failure) and again at the end, after the ticket generators have run. CI runs the same
+# check as its first step.
+source scripts/no-python.sh
 echo "== no Python (every script in this repo is TypeScript)"
-py=$(git ls-files | grep -E '\.py$' || true)
-[ -z "$py" ] || { echo "tracked .py files are not allowed:"; echo "$py"; exit 1; }
-py=$(find . -name '*.py' -not -path './node_modules/*' -not -path './.git/*' || true)
-[ -z "$py" ] || { echo ".py files are not allowed (untracked too):"; echo "$py"; exit 1; }
-for f in requirements.txt pyproject.toml setup.py setup.cfg pytest.ini tox.ini .python-version; do
-  if [ -e "$f" ]; then echo "Python config $f is not allowed"; exit 1; fi
-done
-echo "no .py files, no Python config"
+no_python
+echo "no Python files, no Python config"
 echo "== unit tests"; node test/run-unit.mjs
 echo "== bench tickets (self-test: broken fails, reference passes)"; node bench/selftest.ts | tail -1
 echo "== bench ticket generator (deterministic)"; node bench/gen-bulk-rename.ts && git diff --exit-code -- bench/tickets/bulk-rename
@@ -25,4 +23,6 @@ echo "== extensions/local-edit bench"; node extensions/local-edit/bench/selftest
 echo "== loop-guard bench tickets"; node extensions/loop-guard/bench/selftest.ts
 echo "== verify-gate bench tickets (self-test)"; node extensions/verify-gate/bench/selftest.ts
 echo "== experimental/d3-context"; experimental/d3-context/scripts/check.sh
+echo "== no Python again (after the ticket generators have written their trees)"; no_python
+echo "no Python files, no Python config"
 echo "CHECK OK"
