@@ -184,7 +184,6 @@ export function makeAgentDir({ mockUrl, mockModel, mode = configMode(), extensio
 				const base = rel.split("/").pop();
 				if (rel === "sessions" || rel.startsWith("sessions/")) return false;
 				if (base.endsWith("~") || base.includes(".pre-")) return false; // editor and migration backups
-				if (rel === "extensions/llama-native") return false; // the experiment, linked by its own scripts
 				return true;
 			},
 		});
@@ -258,6 +257,5 @@ export function extensionDirs() {
 	if (existsSync(ext))
 		for (const d of readdirSync(ext, { withFileTypes: true }))
 			if (d.isDirectory() && existsSync(join(ext, d.name, "index.ts"))) out.push(join(ext, d.name));
-	out.push(join(REPO, "experimental", "llama-native", "extension"));
 	return out;
 }

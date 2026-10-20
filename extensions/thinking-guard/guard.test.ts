@@ -16,7 +16,6 @@ test("local models and scope", () => {
 	const cloud = { provider: "anthropic", api: "anthropic-messages", baseUrl: "https://api.anthropic.com" };
 	assert.ok(isLocalModel(local));
 	assert.ok(!isLocalModel(cloud));
-	assert.ok(isLocalModel({ provider: "llama-native", api: "llama-native" }));
 	assert.ok(isGuarded(local, DEFAULTS));
 	assert.ok(!isGuarded(cloud, DEFAULTS));
 	assert.ok(isGuarded(cloud, { ...DEFAULTS, scope: "all" }));

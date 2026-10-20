@@ -85,7 +85,7 @@ TypeScript ports of the homelab coding evals, plus two of my own. Each is graded
 
 | homelab eval | tickets |
 |---|---|
-| `evals/agentic-glimmer-2026-10-14`: the six agentic pi tickets, also used by the llama-native bench | `logstats`, `cli-json`, `config-rename`, `ttlcache`, `presets-ini` (the ambiguous `argv` is now spelled out), `sqlite-migration` (`node:sqlite`) |
+| `evals/agentic-glimmer-2026-10-14`: the six agentic pi tickets, the shared bench tickets of `bench/tickets/` | `logstats`, `cli-json`, `config-rename`, `ttlcache`, `presets-ini` (the ambiguous `argv` is now spelled out), `sqlite-migration` (`node:sqlite`) |
 | `evals/local-ai-campaign-2026-09-08/capability-suite`: the three coding tasks of the local-vs-cloud comparison, single-shot there, agentic tickets here | `event-reconcile`, `schedule-repair`, `api-migration` |
 | new | `isoweek` (year-boundary dates, where tests easily share the code's mistake), `duration` (the project check also covers a changelog rule) |
 

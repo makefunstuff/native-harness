@@ -4,7 +4,7 @@
 //   node extensions/local-edit/bench/replay.mjs [--json out.json] [--show] [session dirs...]
 //
 // Default sources: ~/.pi/agent/sessions and the bench sessions of the pi-extras experiments that run
-// plain coding tickets (llama-native, d3-context, verify-gate under ~/.cache/pi-extras); not
+// plain coding tickets (the shared bench, verify-gate under ~/.cache/pi-extras); not
 // local-edit's own (its edits already went through it), nor the trap tickets of loop-guard and
 // thinking-guard, which make edits fail on purpose.
 // Sessions stay where they are; only counts (and, with --show, the cases) are printed.
@@ -37,7 +37,7 @@ if (!dirs.length) {
 	dirs.push(join(HOME, ".pi/agent/sessions"));
 	const cache = join(HOME, ".cache/pi-extras");
 	// plain coding tickets only: loop-guard and thinking-guard run traps that fail edits on purpose
-	for (const d of ["llama-native", "d3-context", "verify-gate"]) if (existsSync(join(cache, d, "sessions"))) dirs.push(join(cache, d, "sessions"));
+	for (const d of ["pi-extras", "d3-context", "verify-gate"]) if (existsSync(join(cache, d, "sessions"))) dirs.push(join(cache, d, "sessions"));
 }
 
 function files(dir) {
@@ -53,7 +53,7 @@ function files(dir) {
 	return out;
 }
 
-const LOCAL = /^(llama\.cpp|llama-native|ollama|lmstudio|vllm|strata)$/;
+const LOCAL = /^(llama\.cpp|ollama|lmstudio|vllm|strata)$/;
 const base = createEditToolDefinition(process.cwd());
 const prep = (a) => repairArguments(a, base.prepareArguments);
 

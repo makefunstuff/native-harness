@@ -105,8 +105,8 @@ free: "removed, then fetched again" is a wrong drop.
   (`[vllm-d3-flash]` in models.ini: CUDA1, 8k context, ubatch 4096). The `d3-27b` arm used
   `vllm-d3` (27B) on the two bundles only. Embeddings (bringing dropped items back) were not built.
   The stub tells the agent to re-run the tool, which is cheap.
-- **Tickets** (`bench/tasks-long`, generated deterministically by `bench/gen_long_tasks.py` and not
-  committed; hidden tests; self-tested by `bench/selftest.sh`):
+- **Tickets** (`bench/tasks-long`, generated deterministically and not committed; hidden tests;
+  self-tested by `node bench/selftest.ts --tasks-root bench/tasks-long`):
   - nine messy tickets: a red CI log, a 9k-line production log plus a behaviour doc, a 28-module
     rename, an API v1→v2 migration driven by a 940-line changelog, a performance fix with a profiler
     dump, a legacy report checked against a golden file, a 4-stage ETL with mixed encodings, a
@@ -114,9 +114,12 @@ free: "removed, then fetched again" is a wrong drop.
     may be fixed;
   - two bundles that each put four of them into one repo as "release blockers". These are the long
     sessions: 25-58 turns, peak context 82-124k.
-- **Measures:** `bench/ctx_run.py` (per-run rows from pi's session usage and the extension log),
-  `bench/ctx_report.py` (→ `results/summary.md`), and `bench/ctx_forgot.py` /
-  `bench/ctx_quick_refetch.py` (candidates for "forgot something", then read by hand). Cost is at
+- **Measures:** the runs and their rows (per-run rows from pi's session usage and the extension
+  log), the report (→ `results/summary.md`), and the "forgot something" candidates (then read by
+  hand). Those runs were measured by this experiment's Python scripts; the repo is Python-free now,
+  and the same measurements are `node bench/run.ts --bench d3-context`,
+  `bench/context-report.ts`, `bench/forgot.ts` and `bench/quick-refetch.ts`. The rows, tables and
+  decision logs below are the data of those runs. Cost is at
   deepseek-flash peak list prices (cache hit $0.006, miss $0.30, output $1.20 per M), the same for
   every run.
 
@@ -167,7 +170,8 @@ within 3 turns:
 - base, for comparison: 32% of all file reads are re-read within 3 turns anyway.
 
 Most re-reads are therefore normal working style: narrower `sed -n` ranges, verification with
-`git diff`. Reading the candidates by hand (`bench/ctx_quick_refetch.py --show`):
+`git diff`. Reading the candidates by hand (then `bench/ctx_quick_refetch.py --show`, today
+`experimental/d3-context/bench/quick-refetch.ts --show`):
 - **d3-flash, about 7 real cases in 6 of 22 runs:**
   - the config spec (config-validator r1),
   - `kv/cli.py` (issue-triage r1),
@@ -248,15 +252,20 @@ the context savings are smaller and the cost penalty remains.
 ## Reproduce
 
 ```bash
-python3 bench/gen_long_tasks.py && bash bench/selftest.sh      # tickets
-scripts/make-pi-agent-copy.sh                                             # pi config copy
+node experimental/d3-context/bench/gen-long-tasks.ts                     # the long tickets
+node bench/selftest.ts --tasks-root experimental/d3-context/bench/tasks-long
 # d3-flash on loopback, the router preset's flags (or the router's /v1 when it can spawn models):
 llama-server --host 127.0.0.1 --port 18190 -m vllm-d3-flash-Q8_0.gguf --mmproj mmproj-vllm-d3-flash-Q8_0.gguf \
   --ctx-size 8192 --device CUDA1 -ngl all --fit off -fa on --parallel 1 -b 4096 -ub 4096 --kv-unified
 export D3_URL=http://127.0.0.1:18190/v1
-python3 bench/ctx_run.py base --rounds 2 --jobs 3 & python3 bench/ctx_run.py d3 --rounds 2 --jobs 3
-python3 bench/ctx_report.py; python3 bench/ctx_quick_refetch.py --show
+node bench/run.ts --bench d3-context --arms base --rounds 2 --workers 3
+node bench/run.ts --bench d3-context --arms d3   --rounds 2 --workers 3
+node experimental/d3-context/bench/context-report.ts
+node experimental/d3-context/bench/quick-refetch.ts --show
 ```
+
+pi runs in-process, on a copy of `~/.pi/agent` under the bench cache (nothing in the real one is
+edited). The recorded runs used the Python scripts of this experiment, since removed.
 
 Raw rows: `results/raw/{base,d3,d3-27b}.jsonl`. Per-run decision logs, diffs and pi stderr
 (also of the superseded and invalid runs): `tar -xJf results/raw-artifacts.tar.xz -C results`.

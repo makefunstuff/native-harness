@@ -57,17 +57,18 @@ pi install git:github.com/makefunstuff/pi-extras           # latest from main
   fewer tokens per ticket. No local numbers: the local series was skipped, and the cloud rerun with
   working Hindsight writes is still open. [README](extensions/lessons/README.md)
 
-### Experiments (not in the installed package manifest)
+### Experiments
 
-- **`experimental/llama-native`** — llama.cpp inside pi's process as a model provider; needs a
-  llama.cpp build and a native addon you compile. Measured negative: same kernels, so the same
-  decode and prefill speed, and llama-server's prompt cache already reuses ~92 % of the prompt in
-  an agent loop. [README](experimental/llama-native/README.md),
-  [RESULTS.md](experimental/llama-native/RESULTS.md)
-- **`experimental/d3-context`** — a local decision model keeps, summarises or drops old tool output
-  at subtask boundaries; loaded with `pi -e`, needs `D3_URL`. Measured negative: no gain, higher
-  cost with cached providers. [README](experimental/d3-context/README.md),
-  [RESULTS.md](experimental/d3-context/RESULTS.md)
+- **`experimental/d3-context`** (not in the installed package manifest) — a local decision model
+  keeps, summarises or drops old tool output at subtask boundaries; loaded with `pi -e`, needs
+  `D3_URL`. Measured negative: no gain, higher cost with cached providers.
+  [README](experimental/d3-context/README.md), [RESULTS.md](experimental/d3-context/RESULTS.md)
+- **`experimental/llama-native` is removed in this release** — llama.cpp inside pi's process as a
+  model provider, the experiment pi-extras grew out of. It needed a llama.cpp build and a compiled
+  addon, and it lost: same kernels, so the same decode and prefill speed, and llama-server's prompt
+  cache already reuses ~92 % of the prompt in an agent loop. Its code, bench and `RESULTS.md` stay
+  in git history, and the README's [Removed](README.md#removed) section gives a command that
+  recovers the report as it stood.
 
 ### Known gaps in 0.1.0
 
@@ -86,6 +87,11 @@ pi install git:github.com/makefunstuff/pi-extras           # latest from main
   [template](templates/extension/README.md), the headless smoke test that installs the package from
   git into a throw-away config copy and runs `pi -p` against a mock model, and
   [`scripts/check.sh`](scripts/check.sh) as the single repository check (CI: Node 22 and 24).
-- Each extension's bench is TypeScript on pi's SDK (`createAgentSession`), with TypeScript tickets
-  (repo, issue, reference solution, hidden `node:test` grader) and recorded rows under
-  `bench/results/`.
+- **No Python in the repo.** The benches that were Python are one shared TypeScript bench,
+  [`bench/`](bench/README.md), driving pi in-process through its SDK (`createAgentSession`), with
+  TypeScript tickets (repo, issue, reference solution, hidden `node:test` grader); recorded runs
+  stay as data (`.jsonl` rows, summary tables, `RESULTS.md`), and CI fails on a `.py` file
+  (`scripts/no-python.sh`, run first and last by `scripts/check.sh`). Each extension's own bench is
+  the same shape, with rows under `bench/results/`.
+- `package.json` is `"private": true`: the package is installed from git, and it is not published
+  to npm.
